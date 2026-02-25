@@ -42,3 +42,9 @@
 
 # MacOs DS_Store Files deactivation
 .DS_Store
+
+# remove unessecary drogon folders
+uploads/**
+
+# remove build folder from 
+build/**
