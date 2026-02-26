@@ -6,7 +6,7 @@
 
 #include <drogon/HttpFilter.h>
 
-#include "AuthenticationService.h"
+#include "../Services/AuthenticationService.h"
 
 namespace StructuraSystems::Server {
     class AdministrationFilter : public drogon::HttpFilter<StructuraSystems::Server::AdministrationFilter> {

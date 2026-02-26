@@ -10,7 +10,7 @@
 #include "../Services/ProjectVersioningService.h"
 #include "../Services/ServerProjectService.h"
 #include "../Services/ElementNavigationService.h"
-#include "../Services/JwtFilter.hpp"
+#include "../Filter/JwtFilter.hpp"
 
 
 namespace StructuraSystems::Server

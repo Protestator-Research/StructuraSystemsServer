@@ -116,6 +116,26 @@ namespace StructuraSystems::Server {
 		return false;
 	}
 
+	User AuthenticationService::getUserFromDatabase(std::string bearerToken) {
+		std::string username = ValidInstances[bearerToken]->Username;
+		return UsernameHashMap[username];
+	}
+
+	std::vector<User> AuthenticationService::getUsersFromDatabase() {
+		std::vector<User> users;
+
+		for (const auto& user_pair : UsernameHashMap)
+			users.push_back(user_pair.second);
+
+		return users;
+	}
+
+	User AuthenticationService::deleteUserFromDatabase(std::string username) {
+		User user = UsernameHashMap[username];
+		UsernameHashMap.erase(username);
+		return user;
+	}
+
 	std::string AuthenticationService::decode64(const std::string &value) {
 		using namespace boost::archive::iterators;
 		using It = transform_width<binary_from_base64<std::string::const_iterator>, 8, 6>;

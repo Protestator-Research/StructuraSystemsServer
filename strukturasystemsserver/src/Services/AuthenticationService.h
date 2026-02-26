@@ -30,6 +30,10 @@ namespace StructuraSystems::Server
 
 		bool isTokenAuthenticated(std::string bearerToken);
 		bool isUserAuthenticationAdiministrator(std::string bearerToken);
+
+		User getUserFromDatabase(std::string bearerToken);
+		std::vector<User> getUsersFromDatabase();
+		User deleteUserFromDatabase(std::string username);
 	private:
 		AuthenticationService();
 

@@ -46,5 +46,6 @@
 # remove unessecary drogon folders
 uploads/**
 
-# remove build folder from 
+# remove folder from Git
 build/**
+.idea/**

@@ -35,9 +35,14 @@ set(SOURCES
         src/Entities/json/TwinRequest.h
         src/Services/DigitalTwinService.cpp
         src/Services/DigitalTwinService.h
-        src/Services/JwtFilter.hpp
+        src/Filter/JwtFilter.hpp
         src/Entities/db/User.hpp
-        src/Services/AdministrationFilter.hpp)
+        src/Filter/AdministrationFilter.hpp
+        src/Filter/CorsFilter.hpp
+        src/Entities/json/UserRequest.cpp
+        src/Entities/json/UserRequest.h
+        src/Entities/json/UserResponse.cpp
+        src/Entities/json/UserResponse.h)
 
 add_executable(StructuraSystemsServer ${SOURCES})
 

@@ -6,7 +6,7 @@
 #include <drogon/HttpController.h>
 
 #include "../Services/ServerProjectService.h"
-#include "../Services/JwtFilter.hpp"
+#include "../Filter/JwtFilter.hpp"
 
 namespace StructuraSystems::Server
 {
