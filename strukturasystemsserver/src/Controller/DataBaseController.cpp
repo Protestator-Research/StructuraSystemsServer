@@ -1,5 +1,6 @@
 ﻿#include "DataBaseController.h"
 #include <bsoncxx/builder/basic/document.hpp>
+#include <bsoncxx/builder/stream/document.hpp>
 #include <bsoncxx/json.hpp>
 #include <nlohmann/json.hpp>
 
@@ -302,6 +303,40 @@ namespace StructuraSystems::Server
 		return returnValue;
 	}
 
+	void DataBaseController::removeUser(std::string username) {
+		try {
+			auto collection = database["users"];
+			auto filter = bsoncxx::builder::stream::document{} << "_id" << username << bsoncxx::builder::stream::finalize;
+			auto cursor = collection.delete_one(filter.view());
+			if (cursor->deleted_count()==1)
+				std::cout << "User "<< username << " deleted" << std::endl;
+		}
+		catch (const std::exception& e) {
+			std::cerr << "Ungültige ObjectId: " << e.what() << "\n";
+		}
+	}
+
+	void DataBaseController::changeUser(const User &user) {
+		auto collection = database["users"];
+		auto filter = bsoncxx::builder::stream::document{} << "_id" << user.username() << bsoncxx::builder::stream::finalize;
+
+		auto update = bsoncxx::builder::stream::document{}
+		<< "$set"
+			<< bsoncxx::builder::stream::open_document
+				<< "securityString" << user.hashedPassword()
+				<< "group" << user.group()
+				<< "role" << (int)user.role()
+			<< bsoncxx::builder::stream::close_document
+		<< bsoncxx::builder::stream::finalize;
+
+		auto result = collection.update_one(filter.view(), update.view());
+
+		if (result && result->modified_count() == 1)
+			std::cout << "Dokument aktualisiert\n";
+		else
+			std::cout << "Nichts geändert\n";
+	}
+
 
 	DataBaseController* DataBaseController::createInstance(std::string dbAddress, std::string username, std::string password)
 	{
@@ -350,6 +385,7 @@ namespace StructuraSystems::Server
 		database.create_collection("tags");
 		database.create_collection("branches");
 		database.create_collection("users");
+		database.create_collection("digital_twins");
 
 		std::vector<std::shared_ptr<SysMLv2::REST::Project>> projects = {
 			std::make_shared<SysMLv2::REST::Project>("AnalysisTooling.sysml", "Preloaded Project", "Main"),

@@ -34,6 +34,7 @@ namespace StructuraSystems::Server
 		User getUserFromDatabase(std::string bearerToken);
 		std::vector<User> getUsersFromDatabase();
 		User deleteUserFromDatabase(std::string username);
+		User changeUserInDatabase(std::string username, std::string password, USER_ROLE role = USER_ROLE::USER);
 	private:
 		AuthenticationService();
 

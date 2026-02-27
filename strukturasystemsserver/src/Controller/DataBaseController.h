@@ -66,6 +66,8 @@ namespace StructuraSystems::Server
 
 		void addUser(const User& user);
 		std::map<std::string, User> getAllUser();
+		void removeUser(std::string username);
+		void changeUser(const User& user);
 
 	private:
 		DataBaseController(std::string dBAddress, std::string username, std::string password);

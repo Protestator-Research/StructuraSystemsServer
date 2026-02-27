@@ -51,12 +51,20 @@ namespace StructuraSystems::Server {
             return HashedPassword;
         }
 
+        void setNewHashedPassword(std::string newHashedPassword) {
+            HashedPassword = newHashedPassword;
+        }
+
         std::string group() const{
             return Group;
         }
 
         USER_ROLE role() const{
             return Role;
+        }
+
+        void setRole(USER_ROLE role) {
+            Role = role;
         }
 
         std::string getJson() const{

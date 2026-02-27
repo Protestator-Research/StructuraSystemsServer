@@ -23,7 +23,7 @@ namespace StructuraSystems::Server
 		ADD_METHOD_TO(AuthenticationController::getUser, "/me", drogon::Get, "StructuraSystems::Server::JwtFilter");
 		ADD_METHOD_TO(AuthenticationController::getAllUser, "/admin/users", drogon::Get, "StructuraSystems::Server::AdministrationFilter");
 		ADD_METHOD_TO(AuthenticationController::deleteUser, "/admin/users/{1:username}", drogon::Delete, "StructuraSystems::Server::AdministrationFilter");
-		// ADD_METHOD_TO(AuthenticationController::deleteUser, "/admin/users/{1:username}", drogon::Put, "StructuraSystems::Server::AdministrationFilter");
+		ADD_METHOD_TO(AuthenticationController::deleteUser, "/admin/users/{1:username}", drogon::Put, "StructuraSystems::Server::AdministrationFilter");
 		METHOD_LIST_END
 
 		~AuthenticationController() override = default;
@@ -103,9 +103,25 @@ namespace StructuraSystems::Server
 			callback(response);
 		}
 
-		// void changeUser(const drogon::HttpRequestPtr&, std::function<void(const drogon::HttpResponsePtr&)>&& callback, std::string username) {
+		void changeUser(const drogon::HttpRequestPtr& request, std::function<void(const drogon::HttpResponsePtr&)>&& callback, std::string username) {
+			const auto payload = request->getJsonObject();
+			if (!payload) {
+				callback(drogon::HttpResponse::newHttpResponse(drogon::k400BadRequest, drogon::CT_TEXT_PLAIN));
+				return;
+			}
+			try {
+				auto reqUser = UserRequest(payload->toStyledString());
+				AuthService->changeUserInDatabase(username,reqUser.getPassword(),(USER_ROLE)reqUser.getUserRole());
 
-		// }
+				auto response = drogon::HttpResponse::newHttpResponse(drogon::k201Created,drogon::CT_TEXT_PLAIN);
+				callback(response);
+				return;
+			}
+			catch (...) {
+				callback(drogon::HttpResponse::newHttpResponse(drogon::k409Conflict,drogon::CT_TEXT_PLAIN));
+				return;
+			}
+		}
 
 		std::shared_ptr<AuthenticationService> AuthService = AuthenticationService::getInstance();
 	};

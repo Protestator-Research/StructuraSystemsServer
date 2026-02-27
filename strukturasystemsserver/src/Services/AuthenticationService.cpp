@@ -133,7 +133,24 @@ namespace StructuraSystems::Server {
 	User AuthenticationService::deleteUserFromDatabase(std::string username) {
 		User user = UsernameHashMap[username];
 		UsernameHashMap.erase(username);
+
 		return user;
+	}
+
+	User AuthenticationService::changeUserInDatabase(std::string username, std::string password, USER_ROLE role) {
+		char securityString[crypto_pwhash_STRBYTES];
+		if (crypto_pwhash_str(
+			securityString,
+			password.c_str(),
+			password.size(),
+			crypto_pwhash_OPSLIMIT_INTERACTIVE,
+			crypto_pwhash_MEMLIMIT_INTERACTIVE) != 0) {
+			std::cerr << "crypto_pwhash_str failed (out of memory?)\n";
+			return UsernameHashMap[username];
+			}
+		UsernameHashMap[username].setNewHashedPassword(securityString);
+		UsernameHashMap[username].setRole((USER_ROLE)role);
+		return UsernameHashMap[username];
 	}
 
 	std::string AuthenticationService::decode64(const std::string &value) {
