@@ -22,7 +22,9 @@
 #include <iostream>
 #include <fstream>
 #include <iomanip>
+#include <sysmlv2/rest/entities/Tag.h>
 
+#include "../Entities/json/TwinResponse.h"
 
 
 namespace StructuraSystems::Server
@@ -140,6 +142,23 @@ namespace StructuraSystems::Server
 		}
 		std::cout << returnValue.size() << " Branches loaded from Database." << std::endl;
 		return returnValue;
+	}
+
+	void DataBaseController::deleteBranch(std::shared_ptr<SysMLv2::REST::Branch> branch) {
+		try {
+			auto collection = database["branches"];
+
+			auto filter = bsoncxx::builder::stream::document{}
+				<< "_id" << boost::uuids::to_string(branch->getId())
+				<< bsoncxx::builder::stream::finalize;
+
+			const auto cursor = collection.delete_one(filter.view());
+			if (cursor->deleted_count()==1)
+				std::cout << "User "<< branch->getName() << " deleted" << std::endl;
+		}
+		catch (const std::exception& e) {
+			std::cerr << "Ungültige ObjectId: " << e.what() << "\n";
+		}
 	}
 
 	void DataBaseController::addMultibleCommits(std::map<boost::uuids::uuid, std::vector<std::shared_ptr<SysMLv2::REST::Commit>>> projectCommitMap)
@@ -279,6 +298,94 @@ namespace StructuraSystems::Server
 			elementProijectIDMap[commitId].push_back(element);
 		}
 		return elementProijectIDMap;
+	}
+
+	void DataBaseController::addTag(boost::uuids::uuid , std::shared_ptr<SysMLv2::REST::Tag> tag) {
+		std::string jsonString = tag->serializeToJson();
+		replace(jsonString, "@id", "_id");
+		nlohmann::json json = nlohmann::json::parse(jsonString);
+		database["tags"].insert_one(bsoncxx::from_json(json.dump()));
+	}
+
+	void DataBaseController::deleteTag(std::shared_ptr<SysMLv2::REST::Tag> tag) {
+		try {
+			auto collection = database["tags"];
+
+			auto filter = bsoncxx::builder::stream::document{}
+			<< "_id" << boost::uuids::to_string(tag->getId())
+			<< bsoncxx::builder::stream::finalize;
+
+			const auto cursor = collection.delete_one(filter.view());
+			if (cursor->deleted_count()==1)
+				std::cout << "Tag "<< tag->getName() << " deleted" << std::endl;
+		}
+		catch (const std::exception& e) {
+			std::cerr << "Ungültige ObjectId: " << e.what() << "\n";
+		}
+	}
+
+	std::map<boost::uuids::uuid, std::vector<std::shared_ptr<SysMLv2::REST::Tag>>> DataBaseController::getAllTags() {
+		std::map<boost::uuids::uuid, std::vector<std::shared_ptr<SysMLv2::REST::Tag>>> returnValue;
+
+		auto collection = database["tags"];
+		auto cursor = collection.find({});
+		for (auto&& doc : cursor)
+		{
+			std::string dbString = bsoncxx::to_json(doc);
+			replace(dbString, "_id", "@id");
+
+			auto tag = std::make_shared<SysMLv2::REST::Tag>(dbString);
+
+			if (returnValue.find(tag->owningProject()->getId()) == returnValue.end())
+				returnValue.insert(std::make_pair(tag->owningProject()->getId(), std::vector<std::shared_ptr<SysMLv2::REST::Tag>>()));
+
+			returnValue[tag->owningProject()->getId()].push_back(tag);
+		}
+		return returnValue;
+	}
+
+	void DataBaseController::addTwin(boost::uuids::uuid, std::shared_ptr<StructuraSystems::Server::TwinResponse> twinTag) {
+		std::string jsonString = twinTag->serializeToJson();
+		replace(jsonString, "@id", "_id");
+		nlohmann::json json = nlohmann::json::parse(jsonString);
+		database["digital_twins"].insert_one(bsoncxx::from_json(json.dump()));
+	}
+
+	void DataBaseController::deleteTwin(std::shared_ptr<StructuraSystems::Server::TwinResponse> twinTag) {
+		try {
+			auto collection = database["digital_twins"];
+
+			auto filter = bsoncxx::builder::stream::document{}
+			<< "_id" << boost::uuids::to_string(twinTag->getId())
+			<< bsoncxx::builder::stream::finalize;
+
+			const auto cursor = collection.delete_one(filter.view());
+			if (cursor->deleted_count()==1)
+				std::cout << "Tag "<< twinTag->getName() << " deleted" << std::endl;
+		}
+		catch (const std::exception& e) {
+			std::cerr << "Ungültige ObjectId: " << e.what() << "\n";
+		}
+	}
+
+	std::map<boost::uuids::uuid, std::vector<std::shared_ptr<StructuraSystems::Server::TwinResponse>>> DataBaseController::getAllTwins() {
+		std::map<boost::uuids::uuid, std::vector<std::shared_ptr<TwinResponse>>> returnValue;
+
+		auto collection = database["digital_twins"];
+		auto cursor = collection.find({});
+		for (auto&& doc : cursor)
+		{
+			std::string dbString = bsoncxx::to_json(doc);
+			replace(dbString, "_id", "@id");
+
+			auto tag = std::make_shared<TwinResponse>(dbString);
+
+			if (returnValue.find(tag->owningProject()->getId()) == returnValue.end())
+				returnValue.insert(std::make_pair(tag->owningProject()->getId(), std::vector<std::shared_ptr<TwinResponse>>()));
+
+			returnValue[tag->owningProject()->getId()].push_back(tag);
+		}
+		return returnValue;
 	}
 
 	void DataBaseController::addUser(const User& user)

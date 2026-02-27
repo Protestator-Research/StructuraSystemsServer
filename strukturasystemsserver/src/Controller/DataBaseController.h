@@ -13,19 +13,13 @@
 
 namespace SysMLv2::REST
 {
-	class Data;
-}
-
-namespace SysMLv2::REST
-{
-	class DataVersion;
-}
-
-namespace SysMLv2::REST
-{
 	class Project;
 	class Branch;
 	class Commit;
+	class DataVersion;
+	class Tag;
+	class Data;
+
 }
 
 namespace KerML::Entities {
@@ -34,6 +28,8 @@ namespace KerML::Entities {
 
 namespace StructuraSystems::Server
 {
+	class TwinResponse;
+
 	class DataBaseController
 	{
 	public:
@@ -51,6 +47,7 @@ namespace StructuraSystems::Server
 		void addMultibleBranches(std::map<boost::uuids::uuid, std::vector<std::shared_ptr<SysMLv2::REST::Branch>>> projectBranchMap);
 		void addBranch(boost::uuids::uuid projectId, std::shared_ptr<SysMLv2::REST::Branch> branch);
 		std::map<boost::uuids::uuid, std::vector<std::shared_ptr<SysMLv2::REST::Branch>>> getAllBranches();
+		void deleteBranch(std::shared_ptr<SysMLv2::REST::Branch> branch);
 
 		void addMultibleCommits(std::map<boost::uuids::uuid, std::vector<std::shared_ptr<SysMLv2::REST::Commit>>> projectCommitMap);
 		void addCommit(std::shared_ptr<SysMLv2::REST::Commit> commit);
@@ -63,6 +60,14 @@ namespace StructuraSystems::Server
 		void addMultibleElements(std::map<boost::uuids::uuid, std::shared_ptr<KerML::Entities::Element>> projectIDElementData);
 		void addElement(boost::uuids::uuid projectId, std::shared_ptr<KerML::Entities::Element> elementData);
 		std::map<boost::uuids::uuid, std::vector<std::shared_ptr<KerML::Entities::Element>>> getAllElements();
+
+		void addTag(boost::uuids::uuid projectId, std::shared_ptr<SysMLv2::REST::Tag> tag);
+		void deleteTag(std::shared_ptr<SysMLv2::REST::Tag> tag);
+		std::map<boost::uuids::uuid, std::vector<std::shared_ptr<SysMLv2::REST::Tag>>> getAllTags();
+
+		void addTwin(boost::uuids::uuid projectId, std::shared_ptr<StructuraSystems::Server::TwinResponse> twinTag);
+		void deleteTwin(std::shared_ptr<StructuraSystems::Server::TwinResponse> twinTag);
+		std::map<boost::uuids::uuid, std::vector<std::shared_ptr<StructuraSystems::Server::TwinResponse>>> getAllTwins();
 
 		void addUser(const User& user);
 		std::map<std::string, User> getAllUser();

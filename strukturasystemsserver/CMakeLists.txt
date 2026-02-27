@@ -42,7 +42,8 @@ set(SOURCES
         src/Entities/json/UserRequest.cpp
         src/Entities/json/UserRequest.h
         src/Entities/json/UserResponse.cpp
-        src/Entities/json/UserResponse.h)
+        src/Entities/json/UserResponse.h
+)
 
 add_executable(StructuraSystemsServer ${SOURCES})
 
