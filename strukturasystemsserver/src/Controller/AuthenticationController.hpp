@@ -19,7 +19,7 @@ namespace StructuraSystems::Server
 	public:
 		METHOD_LIST_BEGIN
 		ADD_METHOD_TO(AuthenticationController::login, "/login", drogon::Post);
-		ADD_METHOD_TO(AuthenticationController::login, "/admin/users", drogon::Post, "StructuraSystems::Server::AdministrationFilter");
+		ADD_METHOD_TO(AuthenticationController::registerUser, "/admin/users", drogon::Post, "StructuraSystems::Server::AdministrationFilter");
 		ADD_METHOD_TO(AuthenticationController::getUser, "/me", drogon::Get, "StructuraSystems::Server::JwtFilter");
 		ADD_METHOD_TO(AuthenticationController::getAllUser, "/admin/users", drogon::Get, "StructuraSystems::Server::AdministrationFilter");
 		ADD_METHOD_TO(AuthenticationController::deleteUser, "/admin/users/{1:username}", drogon::Delete, "StructuraSystems::Server::AdministrationFilter");

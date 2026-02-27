@@ -107,7 +107,7 @@ namespace StructuraSystems::Server {
 		return false;
 	}
 
-	bool AuthenticationService::isUserAuthenticationAdiministrator(std::string bearerToken) {
+	bool AuthenticationService::isUserAuthenticationAdministrator(std::string bearerToken) {
 		if (isTokenAuthenticated(bearerToken)) {
 			std::string username = ValidInstances[bearerToken]->Username;
 			if (UsernameHashMap[username].role() == USER_ROLE::GLOBAL_ADMINISTRATOR)

@@ -26,7 +26,7 @@ namespace StructuraSystems::Server {
 
             try {
 
-                if (AuthenticationService::getInstance()->isUserAuthenticationAdiministrator(token)) {
+                if (AuthenticationService::getInstance()->isUserAuthenticationAdministrator(token)) {
                     fccb();
                     return;
                 }

@@ -29,7 +29,7 @@ namespace StructuraSystems::Server
 		void addUser(std::string username, std::string password, USER_ROLE role = USER_ROLE::USER);
 
 		bool isTokenAuthenticated(std::string bearerToken);
-		bool isUserAuthenticationAdiministrator(std::string bearerToken);
+		bool isUserAuthenticationAdministrator(std::string bearerToken);
 
 		User getUserFromDatabase(std::string bearerToken);
 		std::vector<User> getUsersFromDatabase();
