@@ -119,6 +119,23 @@ namespace StructuraSystems::Server
 		database["branches"].insert_one(bsoncxx::from_json(json.dump()));
 	}
 
+	void DataBaseController::updateBranch(std::shared_ptr<SysMLv2::REST::Branch> branch) {
+		auto collection = database["users"];
+		auto filter = bsoncxx::builder::stream::document{} << "_id" << boost::uuids::to_string(branch->getId()) << bsoncxx::builder::stream::finalize;
+
+		auto branchString = branch->serializeToJson();
+		replace(branchString, "@id", "_id");
+
+		auto update = bsoncxx::builder::basic::make_document(bsoncxx::builder::basic::kvp("$set",bsoncxx::from_json(branchString)));
+
+		auto result = collection.update_one(filter.view(), update.view());
+
+		if (result && result->modified_count() == 1)
+			std::cout << "Dokument aktualisiert\n";
+		else
+			std::cout << "Nichts geändert\n";
+	}
+
 	std::map<boost::uuids::uuid, std::vector<std::shared_ptr<SysMLv2::REST::Branch>>> DataBaseController::getAllBranches()
 	{
 		std::map<boost::uuids::uuid, std::vector<std::shared_ptr<SysMLv2::REST::Branch>>> returnValue;

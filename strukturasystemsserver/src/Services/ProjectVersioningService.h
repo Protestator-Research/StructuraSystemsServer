@@ -13,7 +13,7 @@ namespace StructuraSystems::Server
 	public:
 		static std::shared_ptr<ProjectVersioningService> getInstance();
 
-		virtual ~ProjectVersioningService() = default;
+		~ProjectVersioningService() override = default;
 
 		std::vector<std::shared_ptr<SysMLv2::REST::Commit>>
 		getCommits(std::shared_ptr<SysMLv2::REST::Project> project) override;

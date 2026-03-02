@@ -1,5 +1,7 @@
 ﻿#include "ProjectVersioningService.h"
 
+#include <kerml/root/annotations/TextualRepresentation.h>
+#include <kerml/root/elements/Element.h>
 #include <sysmlv2/rest/entities/Branch.h>
 #include <sysmlv2/rest/entities/Commit.h>
 #include <sysmlv2/rest/entities/DataVersion.h>
@@ -7,6 +9,8 @@
 #include <sysmlv2/rest/entities/ChangeType.h>
 #include <sysmlv2/rest/entities/Data.h>
 #include <sysmlv2/rest/entities/Tag.h>
+
+#include "../Controller/CommitController.hpp"
 
 namespace StructuraSystems::Server
 {
@@ -58,8 +62,8 @@ namespace StructuraSystems::Server
 		ProjectIdCommitMap[project->getId()].push_back(commit);
 		branch->setHead(commit);
 
-		//TODO DB Controller Update Branch
 		DBController->addCommit(commit);
+		DBController->updateBranch(branch);
 
 		return commit;
 	}
@@ -78,8 +82,8 @@ namespace StructuraSystems::Server
 		ProjectIdCommitMap[project->getId()].push_back(commit);
 		branch->setHead(commit);
 
-		//TODO DB Controller Update Branch
 		DBController->addCommit(commit);
+		DBController->updateBranch(branch);
 
 		return commit;
 	}
@@ -94,8 +98,8 @@ namespace StructuraSystems::Server
 		ProjectIdCommitMap[project->getId()].push_back(commit);
 		branch->setHead(commit);
 
-		//TODO DB Controller Update Branch
 		DBController->addCommit(commit);
+		DBController->updateBranch(branch);
 
 		return commit;
 	}
@@ -109,10 +113,14 @@ namespace StructuraSystems::Server
 		commit->addChange(change);
 
 		ProjectIdCommitMap[project->getId()].push_back(commit);
-		project->getDefaultBranch()->setHead(commit);
-
-		//TODO DB Controller Update Branch
 		DBController->addCommit(commit);
+
+		for (const auto& branch : ProjectIdBranchMap[project->getId()]) {
+			if (branch->getId() == project->getDefaultBranch()->getId()) {
+				branch->setHead(commit);
+				DBController->updateBranch(branch);
+			}
+		}
 
 		return commit;
 	}
@@ -124,10 +132,14 @@ namespace StructuraSystems::Server
 		commit->addChange(change);
 
 		ProjectIdCommitMap[project->getId()].push_back(commit);
-		project->getDefaultBranch()->setHead(commit);
-
-		//TODO DB Controller Update Branch
 		DBController->addCommit(commit);
+
+		for (const auto& branch : ProjectIdBranchMap[project->getId()]) {
+			if (branch->getId() == project->getDefaultBranch()->getId()) {
+				branch->setHead(commit);
+				DBController->updateBranch(branch);
+			}
+		}
 
 		return commit;
 	}
@@ -199,6 +211,7 @@ namespace StructuraSystems::Server
 			if (branch->getId()==branchId)
 			{
 				project->setDefaultBranch(branch);
+				DBController->updateProject(project);
 				return project;
 			}
 		}
@@ -209,6 +222,7 @@ namespace StructuraSystems::Server
 	{
 		const auto newBranch = std::make_shared<SysMLv2::REST::Branch>(branchName);
 		newBranch->setHead(head);
+		DBController->addBranch(project->getId(), newBranch);
 		ProjectIdBranchMap.at(project->getId()).push_back(newBranch);
 		return newBranch;
 	}
@@ -224,6 +238,7 @@ namespace StructuraSystems::Server
 				branch = branchesList[i];
 		}
 		ProjectIdBranchMap.at(project->getId()).erase(std::remove(ProjectIdBranchMap.at(project->getId()).begin(), ProjectIdBranchMap.at(project->getId()).end(), branch));
+		DBController->deleteBranch(branch);
 		return branch;
 	}
 
@@ -255,6 +270,7 @@ namespace StructuraSystems::Server
 		const auto newTag = std::make_shared<SysMLv2::REST::Tag>(tagName);
 		newTag->setReferencedCommit(taggedCommit);
 		ProjectIdTagMap[project->getId()].push_back(newTag);
+		DBController->addTag(project->getId(), newTag);
 		return newTag;
 	}
 
@@ -277,7 +293,10 @@ namespace StructuraSystems::Server
 		ProjectIdCommitMap[project->getId()] = std::vector<std::shared_ptr<SysMLv2::REST::Commit>>();
 
 		ProjectIdBranchMap[project->getId()].push_back(project->getDefaultBranch());
-		//DBController->addBranch(project->getId(), project->getDefaultBranch());
+		const auto dataVersion = std::make_shared<SysMLv2::REST::DataVersion>();
+		dataVersion->setPayload(std::make_shared<KerML::Entities::TextualRepresentation>("SysML v2","# To be filled by you"));
+		createCommit(dataVersion,project->getDefaultBranch(),{},project);
+		DBController->addBranch(project->getId(), project->getDefaultBranch());
 	}
 
 	ProjectVersioningService::ProjectVersioningService()

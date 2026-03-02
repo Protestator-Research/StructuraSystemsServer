@@ -46,6 +46,7 @@ namespace StructuraSystems::Server
 
 		void addMultibleBranches(std::map<boost::uuids::uuid, std::vector<std::shared_ptr<SysMLv2::REST::Branch>>> projectBranchMap);
 		void addBranch(boost::uuids::uuid projectId, std::shared_ptr<SysMLv2::REST::Branch> branch);
+		void updateBranch(std::shared_ptr<SysMLv2::REST::Branch> branch);
 		std::map<boost::uuids::uuid, std::vector<std::shared_ptr<SysMLv2::REST::Branch>>> getAllBranches();
 		void deleteBranch(std::shared_ptr<SysMLv2::REST::Branch> branch);
 
