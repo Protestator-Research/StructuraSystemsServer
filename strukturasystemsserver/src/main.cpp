@@ -50,36 +50,37 @@ int main() {
     [[maybe_unused]] auto jwtFilter = StructuraSystems::Server::JwtFilter();
     [[maybe_unused]] auto adminFilter = StructuraSystems::Server::AdministrationFilter();
 
+    const auto& allowed_origin = customConfig["allowed_origin"].asString();
 
-    std::function<void(const drogon::HttpRequestPtr&,const drogon::HttpResponsePtr&)> addHeader = [](const drogon::HttpRequestPtr& req,const drogon::HttpResponsePtr& resp)-> void {
+    std::function<void(const drogon::HttpRequestPtr&,const drogon::HttpResponsePtr&)> addHeader = [allowed_origin](const drogon::HttpRequestPtr& req,const drogon::HttpResponsePtr& resp)-> void {
         const auto origin = req->getHeader("Origin");
 
-        // Für Dev okay. In Prod: Whitelist (siehe unten).
+#ifndef NDEBUG
         if (!origin.empty()) {
             resp->addHeader("Access-Control-Allow-Origin", origin);
             resp->addHeader("Vary", "Origin");
         }
-
+#else
+        resp->addHeader("Access-Control-Allow-Origin", allowed_origin);
+#endif
         resp->addHeader("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
         resp->addHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
         resp->addHeader("Access-Control-Max-Age", "86400");
-
-        // Nur wenn du Cookies/credentials nutzt:
         resp->addHeader("Access-Control-Allow-Credentials", "true");
     };
 
     drogon::app()
         .registerPreRoutingAdvice([addHeader](const drogon::HttpRequestPtr& req, drogon::AdviceCallback&& acb, drogon::AdviceChainCallback&& accb)
-    {
-        if (req->method() == drogon::Options) {
-            auto resp = drogon::HttpResponse::newHttpResponse();
-            resp->setStatusCode(drogon::k204NoContent);
-            addHeader(req, resp);
-            acb(resp);
-            return;
-        }
-        accb();
-    })
+          {
+            if (req->method() == drogon::Options) {
+                auto resp = drogon::HttpResponse::newHttpResponse();
+                resp->setStatusCode(drogon::k204NoContent);
+                addHeader(req, resp);
+                acb(resp);
+                return;
+            }
+            accb();
+          })
         .registerPostHandlingAdvice(addHeader)
         .setThreadNum(std::thread::hardware_concurrency() / 2)
         .run();
