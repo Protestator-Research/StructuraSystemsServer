@@ -26,7 +26,7 @@ namespace StructuraSystems::Server {
             ProjectIdTwinMap[project->getId()] = std::vector<std::shared_ptr<TwinResponse>>();
 
         ProjectIdTwinMap[project->getId()].push_back(twin);
-        DBController->addTwin(twin);
+        DBController->addTwin(project->getId(),twin);
 
         return twin;
     }
