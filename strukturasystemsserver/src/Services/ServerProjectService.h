@@ -16,7 +16,9 @@ namespace StructuraSystems::Server
 
 		std::shared_ptr<SysMLv2::REST::Project> createProject(std::string projectName, std::string description = "") override;
 
+		std::shared_ptr<SysMLv2::REST::Project> updateProject(boost::uuids::uuid projectId, std::string projectName, std::string description, std::shared_ptr<SysMLv2::REST::Branch> branch) override;
 
+		std::shared_ptr<SysMLv2::REST::Project> deleteProject(boost::uuids::uuid projectId) override;
 	private:
 		ServerProjectService();
 		static std::shared_ptr<ServerProjectService> Instance;
