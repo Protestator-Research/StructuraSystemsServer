@@ -24,7 +24,6 @@ namespace StructuraSystems::Server
 
 	std::vector<std::shared_ptr<KerML::Entities::Element>> ElementNavigationService::getElements(std::shared_ptr<SysMLv2::REST::Project> , std::shared_ptr<SysMLv2::REST::Commit> commit)
 	{
-		//Todo check
 		std::vector<std::shared_ptr<KerML::Entities::Element>> elements;
 		for (const auto& version : commit->getDataVersion()) {
 			const auto &payload = version->getPayload();

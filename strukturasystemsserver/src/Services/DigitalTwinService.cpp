@@ -6,6 +6,8 @@
 
 #include <future>
 
+#include "../Controller/DataBaseController.h"
+
 namespace StructuraSystems::Server {
     std::shared_ptr<DigitalTwinService> DigitalTwinService::Instance = nullptr;
 
@@ -24,11 +26,16 @@ namespace StructuraSystems::Server {
             ProjectIdTwinMap[project->getId()] = std::vector<std::shared_ptr<TwinResponse>>();
 
         ProjectIdTwinMap[project->getId()].push_back(twin);
+        DBController->addTwin(twin);
 
         return twin;
     }
 
     std::vector<std::shared_ptr<TwinResponse>> DigitalTwinService::getAllTwinsForProject(std::shared_ptr<SysMLv2::REST::Project> project) {
         return ProjectIdTwinMap[project->getId()];
+    }
+
+    DigitalTwinService::DigitalTwinService() {
+        DBController = DataBaseController::getInstance();
     }
 }
