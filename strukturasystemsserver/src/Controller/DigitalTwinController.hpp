@@ -27,7 +27,7 @@ namespace StructuraSystems::Server {
 
         void getAllTwins(const drogon::HttpRequestPtr &, std::function<void(const drogon::HttpResponsePtr&)>&& callback, const std::string& projectId) {
             const auto project = ProjectNavigationService->getProjectById(boost::uuids::string_generator()(projectId));
-            const auto twins = DigitalTwinService->getAllTwinsForProject(project);
+            const auto twins = DTService->getAllTwinsForProject(project);
 
             std::string returnValue = "[\r\n";
             for (size_t i = 0; i < twins.size(); i++)
@@ -48,7 +48,7 @@ namespace StructuraSystems::Server {
             const std::shared_ptr<TwinRequest> twinRequest = std::make_shared<TwinRequest>(json);
             const auto project = ProjectNavigationService->getProjectById(boost::uuids::string_generator()(projectId));
             const auto commit = ProjectVerService->getCommitById(project,twinRequest->referencedCommit()->getId());
-            const auto newDigitalTwin = DigitalTwinService->createTwin(twinRequest->name(), project,commit);
+            const auto newDigitalTwin = DTService->createTwin(twinRequest->name(), project,commit);
 
             const auto response = drogon::HttpResponse::newHttpResponse(drogon::k201Created, drogon::CT_APPLICATION_JSON);
             response->setBody(newDigitalTwin->serializeToJson());
@@ -63,7 +63,7 @@ namespace StructuraSystems::Server {
     private:
         std::shared_ptr<ProjectVersioningService> ProjectVerService = ProjectVersioningService::getInstance();
         std::shared_ptr<ServerProjectService> ProjectNavigationService = ServerProjectService::getInstance();
-        std::shared_ptr<DigitalTwinService> DigitalTwinService = DigitalTwinService::getInstance();
+        std::shared_ptr<DigitalTwinService> DTService = DigitalTwinService::getInstance();
 
     };
 }
