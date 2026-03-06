@@ -4,6 +4,7 @@
 #include <boost/lexical_cast.hpp>
 #include <boost/uuid/uuid.hpp>
 #include <boost/uuid/uuid_serialize.hpp>
+#include <utility>
 
 #include "SystemController.hpp"
 #include "../Services/AuthenticationService.h"
@@ -28,7 +29,7 @@ namespace StructuraSystems::Server
 
 		~AuthenticationController() override = default;
 
-		void login(const drogon::HttpRequestPtr& request, std::function<void(const drogon::HttpResponsePtr&)>&& callback)
+		void login(const drogon::HttpRequestPtr& request, std::function<void(const drogon::HttpResponsePtr&)>&& callback) const
 		{
 			const auto payload = request->getJsonObject();
 			if (!payload) {
@@ -51,7 +52,7 @@ namespace StructuraSystems::Server
 			}
 		}
 
-		void registerUser(const drogon::HttpRequestPtr& request, std::function<void(const drogon::HttpResponsePtr&)>&& callback) {
+		void registerUser(const drogon::HttpRequestPtr& request, std::function<void(const drogon::HttpResponsePtr&)>&& callback) const {
 			const auto payload = request->getJsonObject();
 			if (!payload) {
 				callback(drogon::HttpResponse::newHttpResponse(drogon::k400BadRequest, drogon::CT_TEXT_PLAIN));
@@ -71,7 +72,7 @@ namespace StructuraSystems::Server
 			}
 		}
 
-		void getUser(const drogon::HttpRequestPtr& request, std::function<void(const drogon::HttpResponsePtr&)>&& callback) {
+		void getUser(const drogon::HttpRequestPtr& request, std::function<void(const drogon::HttpResponsePtr&)>&& callback) const {
 			const auto authenticationHeader = request->getHeader("Authorization");
 			const auto& user = AuthService->getUserFromDatabase(authenticationHeader.substr(7));
 			const auto& userResponse = UserResponse(user);
@@ -80,7 +81,7 @@ namespace StructuraSystems::Server
 			callback(response);
 		}
 
-		void getAllUser(const drogon::HttpRequestPtr&, std::function<void(const drogon::HttpResponsePtr&)>&& callback) {
+		void getAllUser(const drogon::HttpRequestPtr&, std::function<void(const drogon::HttpResponsePtr&)>&& callback) const {
 			const auto& users = AuthService->getUsersFromDatabase();
 
 			std::string body = "[\r\n";
@@ -96,14 +97,14 @@ namespace StructuraSystems::Server
 			callback(response);
 		}
 
-		void deleteUser(const drogon::HttpRequestPtr&, std::function<void(const drogon::HttpResponsePtr&)>&& callback, std::string username) {
-			const auto& user = AuthService->deleteUserFromDatabase(username);
+		void deleteUser(const drogon::HttpRequestPtr&, std::function<void(const drogon::HttpResponsePtr&)>&& callback, std::string username) const {
+			const auto& user = AuthService->deleteUserFromDatabase(std::move(username));
 			const auto response = drogon::HttpResponse::newHttpResponse(drogon::k200OK, drogon::CT_APPLICATION_JSON);
 			response->setBody(UserResponse(user).serializeToJson());
 			callback(response);
 		}
 
-		void changeUser(const drogon::HttpRequestPtr& request, std::function<void(const drogon::HttpResponsePtr&)>&& callback, std::string username) {
+		void changeUser(const drogon::HttpRequestPtr& request, std::function<void(const drogon::HttpResponsePtr&)>&& callback, std::string username) const {
 			const auto payload = request->getJsonObject();
 			if (!payload) {
 				callback(drogon::HttpResponse::newHttpResponse(drogon::k400BadRequest, drogon::CT_TEXT_PLAIN));
@@ -111,7 +112,7 @@ namespace StructuraSystems::Server
 			}
 			try {
 				auto reqUser = UserRequest(payload->toStyledString());
-				AuthService->changeUserInDatabase(username,reqUser.getPassword(),(USER_ROLE)reqUser.getUserRole());
+				AuthService->changeUserInDatabase(std::move(username),reqUser.getPassword(),(USER_ROLE)reqUser.getUserRole());
 
 				auto response = drogon::HttpResponse::newHttpResponse(drogon::k201Created,drogon::CT_TEXT_PLAIN);
 				callback(response);

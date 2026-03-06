@@ -1,9 +1,15 @@
 cmake_minimum_required(VERSION 3.15)
+
 find_package(sysmllib REQUIRED)
 find_package(OpenSSL REQUIRED)
 find_package(mongocxx REQUIRED)
 find_package(libsodium REQUIRED)
 find_package(Drogon REQUIRED)
+
+configure_file(
+        src/Controller/Helper/version.h.in
+        ${CMAKE_CURRENT_BINARY_DIR}/generated/version.h
+)
 
 set(SOURCES
         src/main.cpp
@@ -43,14 +49,18 @@ set(SOURCES
         src/Entities/json/UserRequest.h
         src/Entities/json/UserResponse.cpp
         src/Entities/json/UserResponse.h
+        src/Controller/VersionController.cpp
+        src/Controller/VersionController.h
+        src/Controller/Helper/version.h.in
+        src/Entities/db/Version.hpp
 )
 
 add_executable(StructuraSystemsServer ${SOURCES})
 
-
-
 target_include_directories(StructuraSystemsServer PUBLIC
-        "${CMAKE_CURRENT_BINARY_DIR}/")
+        "${CMAKE_CURRENT_BINARY_DIR}/"
+        "${CMAKE_CURRENT_BINARY_DIR}/generated/")
+
 if(TARGET mongo::mongocxx_shared)
     target_link_libraries(StructuraSystemsServer PUBLIC
             sysmllib::sysmllib
@@ -82,11 +92,8 @@ foreach(_source IN ITEMS ${_source_list})
     source_group("${_group_path}" FILES "${_source}")
 endforeach()
 
-
 if(MSVC)
     target_compile_options(StructuraSystemsServer PRIVATE /W4 /WX- /bigobj)
-elseif (UNIX AND NOT APPLE)
-    target_compile_options(StructuraSystemsServer PRIVATE -Wall -Wextra -Wpedantic -Werror)
 else ()
     target_compile_options(StructuraSystemsServer PRIVATE -Wall -Wextra -Wpedantic -Werror)
 endif()

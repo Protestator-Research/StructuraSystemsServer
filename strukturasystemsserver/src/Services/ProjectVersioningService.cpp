@@ -293,8 +293,7 @@ namespace StructuraSystems::Server
 		ProjectIdCommitMap[project->getId()] = std::vector<std::shared_ptr<SysMLv2::REST::Commit>>();
 
 		ProjectIdBranchMap[project->getId()].push_back(project->getDefaultBranch());
-		const auto dataVersion = std::make_shared<SysMLv2::REST::DataVersion>();
-		dataVersion->setPayload(std::make_shared<KerML::Entities::TextualRepresentation>("SysML v2","# To be filled by you"));
+		const auto dataVersion = std::make_shared<SysMLv2::REST::DataVersion>(boost::uuids::random_generator()(),std::make_shared<KerML::Entities::TextualRepresentation>("SysML v2","# To be filled by you"));
 		createCommit(dataVersion,project->getDefaultBranch(),{},project);
 		DBController->addBranch(project->getId(), project->getDefaultBranch());
 	}

@@ -1,0 +1,9 @@
+//
+// Created by Moritz Herzog on 05.03.26.
+//
+
+#pragma once
+
+#define BUILD_NUMBER "@BUILD_NUMBER@"
+#define VERSION "@BUILD_VERSION@"
+#define COMMIT_HASH "@BUILD_COMMIT@"

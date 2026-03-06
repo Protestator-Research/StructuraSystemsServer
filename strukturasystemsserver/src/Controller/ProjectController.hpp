@@ -22,8 +22,7 @@ namespace StructuraSystems::Server
 		ADD_METHOD_TO(ProjectController::createProject,"/projects",drogon::Post, "StructuraSystems::Server::JwtFilter");
 		METHOD_LIST_END
 
-		void getProjects(const drogon::HttpRequestPtr &, std::function<void(const drogon::HttpResponsePtr&)>&& callback)
-		{
+		void getProjects(const drogon::HttpRequestPtr &, std::function<void(const drogon::HttpResponsePtr&)>&& callback) const {
 			const auto& projects = _ProjectService->getProjects();
 			std::string returnValue = "[\r\n";
 			for (size_t i = 0; i < projects.size(); i++)
@@ -38,22 +37,19 @@ namespace StructuraSystems::Server
 			callback(response);
 		}
 
-		void getProjectWithId(const drogon::HttpRequestPtr &, std::function<void(const drogon::HttpResponsePtr&)>&& callback, const std::string& projectId)
-		{
+		void getProjectWithId(const drogon::HttpRequestPtr &, std::function<void(const drogon::HttpResponsePtr&)>&& callback, const std::string& projectId) const {
 			const auto response = drogon::HttpResponse::newHttpResponse(drogon::k200OK, drogon::CT_APPLICATION_JSON);
 			response->setBody(_ProjectService->getProjectById(boost::uuids::string_generator()(projectId))->serializeToJson());
 			callback(response);
 		}
 
-		void deleteProjectWithId(const drogon::HttpRequestPtr &, std::function<void(const drogon::HttpResponsePtr&)>&& callback, const std::string& projectId)
-		{
+		void deleteProjectWithId(const drogon::HttpRequestPtr &, std::function<void(const drogon::HttpResponsePtr&)>&& callback, const std::string& projectId) const {
 			const auto response = drogon::HttpResponse::newHttpResponse(drogon::k200OK, drogon::CT_APPLICATION_JSON);
 			response->setBody(_ProjectService->deleteProject(boost::uuids::string_generator()(projectId))->serializeToJson());
 			callback(response);
 		}
 
-		void createProject(const drogon::HttpRequestPtr &request, std::function<void(const drogon::HttpResponsePtr&)>&& callback) const
-		{
+		void createProject(const drogon::HttpRequestPtr &request, std::function<void(const drogon::HttpResponsePtr&)>&& callback) const {
 			auto requestObject = *request->getJsonObject();
 			const auto newProject = _ProjectService->createProject(requestObject["name"].asString(),requestObject["description"].asString());
 			const auto response = drogon::HttpResponse::newHttpResponse(drogon::k201Created, drogon::CT_APPLICATION_JSON);

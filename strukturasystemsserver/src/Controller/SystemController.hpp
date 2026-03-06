@@ -1,6 +1,7 @@
 #pragma once
 
 #include <functional>
+#include "VersionController.h"
 
 #include <drogon/HttpController.h>
 
@@ -15,9 +16,10 @@ namespace StructuraSystems::Server
 		ADD_METHOD_TO(SystemController::getVersionInfo,"/version",drogon::Get);
 		METHOD_LIST_END
 
-		void getVersionInfo(const drogon::HttpRequestPtr &, std::function<void(const drogon::HttpResponsePtr&)>&& callback) {
+		void getVersionInfo(const drogon::HttpRequestPtr &, std::function<void(const drogon::HttpResponsePtr&)>&& callback) const {
 			const auto response = drogon::HttpResponse::newHttpResponse(drogon::k200OK,drogon::CT_TEXT_PLAIN);
-			response->setBody("3.0.alpha");
+			const auto& version = VersionController::getInstance()->getVersion();
+			response->setBody(version);
 			callback(response);
 		}
 	};

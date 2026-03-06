@@ -1,9 +1,12 @@
 ﻿#include "DataBaseController.h"
+#include "../Entities/json/TwinResponse.h"
+#include "VersionController.h"
+#include "../Entities/db/Version.hpp"
+
 #include <bsoncxx/builder/basic/document.hpp>
 #include <bsoncxx/builder/stream/document.hpp>
 #include <bsoncxx/json.hpp>
 #include <nlohmann/json.hpp>
-
 #include <vector>
 #include <memory>
 #include <stdexcept>
@@ -24,7 +27,7 @@
 #include <iomanip>
 #include <sysmlv2/rest/entities/Tag.h>
 
-#include "../Entities/json/TwinResponse.h"
+
 
 
 namespace StructuraSystems::Server
@@ -120,7 +123,7 @@ namespace StructuraSystems::Server
 	}
 
 	void DataBaseController::updateBranch(std::shared_ptr<SysMLv2::REST::Branch> branch) {
-		auto collection = database["users"];
+		auto collection = database[BRANCHES_COLLECTION_IDENTIFIER];
 		auto filter = bsoncxx::builder::stream::document{} << "_id" << boost::uuids::to_string(branch->getId()) << bsoncxx::builder::stream::finalize;
 
 		auto branchString = branch->serializeToJson();
@@ -485,31 +488,30 @@ namespace StructuraSystems::Server
 
 		database = client["structura_systems"];
 
-#ifndef NDEBUG
-		deleteDatabaseIfDebug();
-#endif
-		initializeDatabaseIfNotAvailable();
+// #ifndef NDEBUG
+		// deleteDatabaseIfDebug();
+// #endif
+		checkDatabaseState();
+	}
+
+	void DataBaseController::addVersionToDatabase() {
+		const auto version = VersionController::getInstance()->getVersionElement();
+		database[VERSION_COLLECTION_IDENTIFIER].insert_one(bsoncxx::from_json(version.serialiseJson()));
 	}
 
 	void DataBaseController::initializeDatabaseIfNotAvailable()
 	{
-		try
-		{
-			if (database.list_collection_names().size() > 0)
-				return;
-		}
-		catch (...)
-		{
-		}
+		database.create_collection(PROJECT_COLLECTION_IDENTIFIER);
+		database.create_collection(DATA_ELEMENTS_COLLECTION_IDENTIFIER);
+		database.create_collection(COMMIT_COLLECTION_IDENTIFIER);
+		database.create_collection(DATA_VERSION_COLLECTION_IDENTIFIER);
+		database.create_collection(TAG_COLLECTION_IDENTIFIER);
+		database.create_collection(BRANCHES_COLLECTION_IDENTIFIER);
+		database.create_collection(USER_COLLECTION_IDENTIFIER);
+		database.create_collection(DIGITAL_TWIN_COLLECTION_IDENTIFIER);
+		database.create_collection(VERSION_COLLECTION_IDENTIFIER);
 
-		database.create_collection("projects");
-		database.create_collection("data_elements");
-		database.create_collection("commits");
-		database.create_collection("data_versions");
-		database.create_collection("tags");
-		database.create_collection("branches");
-		database.create_collection("users");
-		database.create_collection("digital_twins");
+		addVersionToDatabase();
 
 		std::vector<std::shared_ptr<SysMLv2::REST::Project>> projects = {
 			std::make_shared<SysMLv2::REST::Project>("AnalysisTooling.sysml", "Preloaded Project", "Main"),
@@ -645,6 +647,24 @@ namespace StructuraSystems::Server
 		addMultibleCommits(commitProjectMap);
 		addMultibleDataVersions(commitIdDataVersionMap);
 		addMultibleElements(commitIdElementsMap);
+	}
+
+	void DataBaseController::checkDatabaseState() {
+		try
+		{
+			const auto& collectionNames = database.list_collection_names();
+			if (collectionNames.size()==0)
+				initializeDatabaseIfNotAvailable();
+			// This else clause only exists, because this project started as a sidequest in my dissertation.
+			else if (std::find(collectionNames.begin(), collectionNames.end(), VERSION_COLLECTION_IDENTIFIER) == collectionNames.end()) {
+				deleteDatabaseIfDebug();
+				initializeDatabaseIfNotAvailable();
+			}
+			//All other database transformations need to be done after this statement.
+		}
+		catch (...) {
+			initializeDatabaseIfNotAvailable();
+		}
 	}
 
 	void DataBaseController::deleteDatabaseIfDebug()

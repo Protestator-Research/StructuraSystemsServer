@@ -77,6 +77,8 @@ namespace StructuraSystems::Server
 
 	private:
 		DataBaseController(std::string dBAddress, std::string username, std::string password);
+
+		void addVersionToDatabase();
  
 		static DataBaseController* Instance;
 
@@ -86,9 +88,20 @@ namespace StructuraSystems::Server
 		mongocxx::database database;
 
 		void initializeDatabaseIfNotAvailable();
+		void checkDatabaseState();
 
 		void deleteDatabaseIfDebug();
 		bool replace(std::string& str, const std::string& from, const std::string& to);
+
+		const std::string PROJECT_COLLECTION_IDENTIFIER = "projects";
+		const std::string DATA_ELEMENTS_COLLECTION_IDENTIFIER = "data_elements";
+		const std::string COMMIT_COLLECTION_IDENTIFIER = "commits";
+		const std::string DATA_VERSION_COLLECTION_IDENTIFIER = "data_versions";
+		const std::string TAG_COLLECTION_IDENTIFIER = "tags";
+		const std::string BRANCHES_COLLECTION_IDENTIFIER = "branches";
+		const std::string USER_COLLECTION_IDENTIFIER = "users";
+		const std::string DIGITAL_TWIN_COLLECTION_IDENTIFIER = "digital_twins";
+		const std::string VERSION_COLLECTION_IDENTIFIER = "versions";
 	};
 }
 
