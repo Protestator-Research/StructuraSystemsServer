@@ -12,7 +12,7 @@ namespace StructuraSystems::Server
 	Json::Value AuthenticationResponse::toJson() const
 	{
 		Json::Value response;
-		response["barrierString"] = BarrierString;
+		response["bearer"] = BarrierString;
 		return response;
 	}
 }
