@@ -1,4 +1,4 @@
-# StructuraSystems
+# StructuraSystemsServer
 
 This is the Server implementation of SysMLv2. Currenlty this all works as a testing platform considering our digital tiwn implementation. But it might be schedules as a full release.
 
