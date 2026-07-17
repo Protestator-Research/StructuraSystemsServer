@@ -39,13 +39,30 @@ namespace StructuraSystems::Server
 
 		void getProjectWithId(const drogon::HttpRequestPtr &, std::function<void(const drogon::HttpResponsePtr&)>&& callback, const std::string& projectId) const {
 			const auto response = drogon::HttpResponse::newHttpResponse(drogon::k200OK, drogon::CT_APPLICATION_JSON);
-			response->setBody(_ProjectService->getProjectById(boost::uuids::string_generator()(projectId))->serializeToJson());
+
+			const auto project = _ProjectService->getProjectById(boost::uuids::string_generator()(projectId));
+			if (project==nullptr)
+            {
+                const auto response = drogon::HttpResponse::newHttpResponse(drogon::k404NotFound, drogon::CT_APPLICATION_JSON);
+                callback(response);
+                return;
+            }
+			response->setBody(project->serializeToJson());
 			callback(response);
 		}
 
 		void deleteProjectWithId(const drogon::HttpRequestPtr &, std::function<void(const drogon::HttpResponsePtr&)>&& callback, const std::string& projectId) const {
 			const auto response = drogon::HttpResponse::newHttpResponse(drogon::k200OK, drogon::CT_APPLICATION_JSON);
-			response->setBody(_ProjectService->deleteProject(boost::uuids::string_generator()(projectId))->serializeToJson());
+
+			const auto project = _ProjectService->deleteProject(boost::uuids::string_generator()(projectId));
+			if (project==nullptr)
+            {
+                const auto response = drogon::HttpResponse::newHttpResponse(drogon::k404NotFound, drogon::CT_APPLICATION_JSON);
+                callback(response);
+                return;
+            }
+
+			response->setBody(project->serializeToJson());
 			callback(response);
 		}
 
