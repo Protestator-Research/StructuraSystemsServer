@@ -38,6 +38,13 @@ namespace StructuraSystems::Server
 		void getCommits(const drogon::HttpRequestPtr &, std::function<void(const drogon::HttpResponsePtr&)>&& callback, std::string projectId)
 		{
 			const auto& project = ProjectNavigationService->getProjectById(boost::uuids::string_generator()(projectId));
+			if (project==nullptr)
+            {
+                const auto response = drogon::HttpResponse::newHttpResponse(drogon::k404NotFound, drogon::CT_APPLICATION_JSON);
+                callback(response);
+                return;
+            }
+
 			const auto& commits = ProjectVerService->getCommits(project);
 			std::string returnValue = "[\r\n";
 			for (size_t i = 0; i < commits.size(); i++)
@@ -57,6 +64,14 @@ namespace StructuraSystems::Server
 			const std::string json = request->getJsonObject()->toStyledString();
 			const auto commitRequest = std::make_shared<SysMLv2::REST::CommitRequest>(json);
 			const auto project = ProjectNavigationService->getProjectById(boost::uuids::string_generator()(projectId));
+			
+			if (project==nullptr)
+            {
+                const auto response = drogon::HttpResponse::newHttpResponse(drogon::k404NotFound, drogon::CT_APPLICATION_JSON);
+                callback(response);
+                return;
+            }
+
 			auto branch = ProjectVerService->getDefaultBranch(project);
 
 			if (branch==nullptr) {
@@ -83,8 +98,23 @@ namespace StructuraSystems::Server
 		void getBranchWithId(const drogon::HttpRequestPtr &, std::function<void(const drogon::HttpResponsePtr&)>&& callback, const std::string& projectId, const std::string& branchId)
 		{
 			const auto project = ProjectNavigationService->getProjectById(boost::uuids::string_generator()(projectId));
+			
+			if (project==nullptr)
+            {
+                const auto response = drogon::HttpResponse::newHttpResponse(drogon::k404NotFound, drogon::CT_APPLICATION_JSON);
+                callback(response);
+                return;
+            }
+
 			auto _branchId = boost::uuids::string_generator()(branchId);
 			const auto branch = ProjectVerService->getBranchById(project, _branchId);
+
+			if (branch==nullptr)
+            {
+                const auto response = drogon::HttpResponse::newHttpResponse(drogon::k404NotFound, drogon::CT_APPLICATION_JSON);
+                callback(response);
+                return;
+            }
 
 			const auto response = drogon::HttpResponse::newHttpResponse(drogon::k200OK, drogon::CT_APPLICATION_JSON);
 			response->setBody(branch->serializeToJson());
@@ -94,6 +124,14 @@ namespace StructuraSystems::Server
 		void getCommitId(const drogon::HttpRequestPtr &, std::function<void(const drogon::HttpResponsePtr&)>&& callback, const std::string& projectId, const std::string& commitId)
 		{
 			const auto project = ProjectNavigationService->getProjectById(boost::uuids::string_generator()(projectId));
+			if (project==nullptr)
+            {
+                const auto response = drogon::HttpResponse::newHttpResponse(drogon::k404NotFound, drogon::CT_APPLICATION_JSON);
+                callback(response);
+                return;
+            }
+
+
 			auto _commitId = boost::uuids::string_generator()(commitId);
 			const auto commit = ProjectVerService->getCommitById(project, _commitId);
 
@@ -111,8 +149,23 @@ namespace StructuraSystems::Server
 		void getCommitChange(const drogon::HttpRequestPtr &request, std::function<void(const drogon::HttpResponsePtr&)>&& callback, const std::string& projectId, const std::string& commitId)
 		{
 			const auto project = ProjectNavigationService->getProjectById(boost::uuids::string_generator()(projectId));
+			if (project==nullptr)
+            {
+                const auto response = drogon::HttpResponse::newHttpResponse(drogon::k404NotFound, drogon::CT_APPLICATION_JSON);
+                callback(response);
+                return;
+            }
+
 			auto _commitId = boost::uuids::string_generator()(commitId);
 			const auto commit = ProjectVerService->getCommitById(project, _commitId);
+			if (commit==nullptr)
+            {
+                const auto response = drogon::HttpResponse::newHttpResponse(drogon::k404NotFound, drogon::CT_APPLICATION_JSON);
+                callback(response);
+                return;
+            }
+
+
 			std::vector<std::shared_ptr<SysMLv2::REST::DataVersion>> change;
 
 			auto changeType = request->getParameter("change_type");
@@ -148,10 +201,32 @@ namespace StructuraSystems::Server
 		void getCommitChangeById(const drogon::HttpRequestPtr &, std::function<void(const drogon::HttpResponsePtr&)>&& callback, const std::string& projectId, const std::string& commitId,const std::string& changeId)
 		{
 			const auto project = ProjectNavigationService->getProjectById(boost::uuids::string_generator()(projectId));
+			if (project==nullptr)
+            {
+                const auto response = drogon::HttpResponse::newHttpResponse(drogon::k404NotFound, drogon::CT_APPLICATION_JSON);
+                callback(response);
+                return;
+            }
+
 			auto _commitId = boost::uuids::string_generator()(commitId);
 			const auto commit = ProjectVerService->getCommitById(project, _commitId);
+			if (commit==nullptr)
+            {
+                const auto response = drogon::HttpResponse::newHttpResponse(drogon::k404NotFound, drogon::CT_APPLICATION_JSON);
+                callback(response);
+                return;
+            }
+
+
 			auto _changeId = boost::uuids::string_generator()(changeId);
 			const auto commitChange = ProjectVerService->getCommitChangeById(project,commit,_changeId);
+			if (commitChange==nullptr)
+            {
+                const auto response = drogon::HttpResponse::newHttpResponse(drogon::k404NotFound, drogon::CT_APPLICATION_JSON);
+                callback(response);
+                return;
+            }
+
 
 			const auto response = drogon::HttpResponse::newHttpResponse(drogon::k200OK, drogon::CT_APPLICATION_JSON);
 			response->setBody(commitChange->serializeToJson());
@@ -163,6 +238,13 @@ namespace StructuraSystems::Server
 			const std::string json = request->getJsonObject()->toStyledString();
 			const auto branchReq = std::make_shared<SysMLv2::REST::BranchRequest>(json);
 			const auto& project = ProjectNavigationService->getProjectById(boost::uuids::string_generator()(projectId));
+			if (project==nullptr)
+            {
+                const auto response = drogon::HttpResponse::newHttpResponse(drogon::k404NotFound, drogon::CT_APPLICATION_JSON);
+                callback(response);
+                return;
+            
+			}
 			const auto& branch = ProjectVerService->createBranch(project, branchReq->getName(),branchReq->getHead());
 
 			const auto response = drogon::HttpResponse::newHttpResponse(drogon::k200OK, drogon::CT_APPLICATION_JSON);
@@ -173,8 +255,21 @@ namespace StructuraSystems::Server
 		void deleteBranch(const drogon::HttpRequestPtr &, std::function<void(const drogon::HttpResponsePtr&)>&& callback, const std::string& projectId, const std::string& branchId)
 		{
 			const auto& project = ProjectNavigationService->getProjectById(boost::uuids::string_generator()(projectId));
+			if (project==nullptr)
+            {
+                const auto response = drogon::HttpResponse::newHttpResponse(drogon::k404NotFound, drogon::CT_APPLICATION_JSON);
+                callback(response);
+                return;
+            }
+
 			auto branchID = boost::uuids::string_generator()(branchId);
 			const auto branch = ProjectVerService->deleteBranch(project,branchID);
+			if (branch==nullptr)
+            {
+                const auto response = drogon::HttpResponse::newHttpResponse(drogon::k404NotFound, drogon::CT_APPLICATION_JSON);
+                callback(response);
+                return;
+            }
 
 			const auto response = drogon::HttpResponse::newHttpResponse(drogon::k200OK, drogon::CT_APPLICATION_JSON);
 			response->setBody(branch->serializeToJson());
@@ -184,6 +279,13 @@ namespace StructuraSystems::Server
 		void getBranches(const drogon::HttpRequestPtr &, std::function<void(const drogon::HttpResponsePtr&)>&& callback, const std::string& projectId)
 		{
 			const auto& project = ProjectNavigationService->getProjectById(boost::uuids::string_generator()(projectId));
+			if (project==nullptr)
+            {
+                const auto response = drogon::HttpResponse::newHttpResponse(drogon::k404NotFound, drogon::CT_APPLICATION_JSON);
+                callback(response);
+                return;
+            }
+
 			const auto branches = ProjectVerService->getBranches(project);
 
 			std::string returnValue = "[\r\n";
@@ -203,6 +305,13 @@ namespace StructuraSystems::Server
 		void getTags(const drogon::HttpRequestPtr &, std::function<void(const drogon::HttpResponsePtr&)>&& callback, const std::string& projectId)
 		{
 			const auto& project = ProjectNavigationService->getProjectById(boost::uuids::string_generator()(projectId));
+			if (project==nullptr)
+            {
+                const auto response = drogon::HttpResponse::newHttpResponse(drogon::k404NotFound, drogon::CT_APPLICATION_JSON);
+                callback(response);
+                return;
+            }
+
 			auto tags = ProjectVerService->getTags(project);
 
 			std::string returnValue = "[\r\n";
@@ -222,8 +331,23 @@ namespace StructuraSystems::Server
 		void getTagsById(const drogon::HttpRequestPtr &, std::function<void(const drogon::HttpResponsePtr&)>&& callback, const std::string& projectId, const std::string& tagId)
 		{
 			const auto& project = ProjectNavigationService->getProjectById(boost::uuids::string_generator()(projectId));
+			if (project==nullptr)
+            {
+                const auto response = drogon::HttpResponse::newHttpResponse(drogon::k404NotFound, drogon::CT_APPLICATION_JSON);
+                callback(response);
+                return;
+            }
+
 			auto tagID = boost::uuids::string_generator()(tagId);
 			const auto& ptag = ProjectVerService->getTagById(project,tagID);
+			if (ptag==nullptr)
+            {
+                const auto response = drogon::HttpResponse::newHttpResponse(drogon::k404NotFound, drogon::CT_APPLICATION_JSON);
+                callback(response);
+                return;
+            }
+
+
 
 			const auto response = drogon::HttpResponse::newHttpResponse(drogon::k200OK, drogon::CT_APPLICATION_JSON);
 			response->setBody(ptag->serializeToJson());

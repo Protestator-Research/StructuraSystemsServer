@@ -20,13 +20,21 @@ namespace StructuraSystems::Server {
     class DigitalTwinController : public drogon::HttpController<StructuraSystems::Server::DigitalTwinController> {
     public:
         METHOD_LIST_BEGIN
-        ADD_METHOD_TO(DigitalTwinController::getAllTwins,"/projects/{1:projectId}/twins", drogon::Get, "StructuraSystems::Server::JwtFilter");
+        ADD_METHOD_TO(DigitalTwinController::getAllTwins, "/projects/{1:projectId}/twins", drogon::Get, "StructuraSystems::Server::JwtFilter");
         ADD_METHOD_TO(DigitalTwinController::postTwin, "/projects/{1:projectId}/twins", drogon::Post, "StructuraSystems::Server::JwtFilter");
         ADD_METHOD_TO(DigitalTwinController::getTwinData, "/project/{1:projectId}/twins/{2:tagId}/data", drogon::Get, "StructuraSystems::Server::JwtFilter");
         METHOD_LIST_END
 
         void getAllTwins(const drogon::HttpRequestPtr &, std::function<void(const drogon::HttpResponsePtr&)>&& callback, const std::string& projectId) {
             const auto project = ProjectNavigationService->getProjectById(boost::uuids::string_generator()(projectId));
+
+            if (project==nullptr)
+            {
+                const auto response = drogon::HttpResponse::newHttpResponse(drogon::k404NotFound, drogon::CT_APPLICATION_JSON);
+                callback(response);
+                return;
+            }
+
             const auto twins = DTService->getAllTwinsForProject(project);
 
             std::string returnValue = "[\r\n";

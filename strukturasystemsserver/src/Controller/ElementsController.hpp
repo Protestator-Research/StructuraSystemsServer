@@ -29,8 +29,23 @@ namespace StructuraSystems::Server
 		void getElements(const drogon::HttpRequestPtr &, std::function<void(const drogon::HttpResponsePtr&)>&& callback, const std::string& projectId, const std::string& commitId)
 		{
 			auto string_generator = boost::uuids::string_generator();
+
 			const auto project = ProjectService->getProjectById(string_generator(projectId));
+			if (project==nullptr)
+            {
+                const auto response = drogon::HttpResponse::newHttpResponse(drogon::k404NotFound, drogon::CT_APPLICATION_JSON);
+                callback(response);
+                return;
+            }
+
 			const auto commit = ProjectVerService->getCommitById(project, string_generator(commitId));
+			if (commit==nullptr)
+            {
+                const auto response = drogon::HttpResponse::newHttpResponse(drogon::k404NotFound, drogon::CT_APPLICATION_JSON);
+                callback(response);
+                return;
+            }
+
 			const auto elements = ElementNavService->getElements(project, commit);
 			
 			std::string returnValue = "[\r\n";
@@ -41,6 +56,7 @@ namespace StructuraSystems::Server
 					returnValue += ",\r\n";
 			}
 			returnValue += "]";
+
 			const auto response = drogon::HttpResponse::newHttpResponse(drogon::k200OK, drogon::CT_APPLICATION_JSON);
 			response->setBody(returnValue);
 			callback(response);
@@ -51,8 +67,30 @@ namespace StructuraSystems::Server
 			auto string_generator = boost::uuids::string_generator();
 
 			const auto project = ProjectService->getProjectById(string_generator(projectId));
+			if (project==nullptr)
+            {
+                const auto response = drogon::HttpResponse::newHttpResponse(drogon::k404NotFound, drogon::CT_APPLICATION_JSON);
+                callback(response);
+                return;
+            }
+
 			const auto commit = ProjectVerService->getCommitById(project, string_generator(commitId));
+			if (commit==nullptr)
+            {
+                const auto response = drogon::HttpResponse::newHttpResponse(drogon::k404NotFound, drogon::CT_APPLICATION_JSON);
+                callback(response);
+                return;
+            }
+
+
 			const auto element = ElementNavService->getElementById(project,commit,boost::uuids::string_generator()(elementId));
+			if (element==nullptr)
+            {
+                const auto response = drogon::HttpResponse::newHttpResponse(drogon::k404NotFound, drogon::CT_APPLICATION_JSON);
+                callback(response);
+                return;
+            }
+
 
 			const auto response = drogon::HttpResponse::newHttpResponse(drogon::k200OK, drogon::CT_APPLICATION_JSON);
 			response->setBody(element->serializeToJson());
