@@ -53,6 +53,7 @@ set(SOURCES
         src/Controller/VersionController.h
         src/Controller/Helper/version.h.in
         src/Entities/db/Version.hpp
+        src/Entities/db/Project.h
 )
 
 add_executable(StructuraSystemsServer ${SOURCES})

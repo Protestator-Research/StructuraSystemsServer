@@ -660,7 +660,6 @@ namespace StructuraSystems::Server
 				deleteDatabaseIfDebug();
 				initializeDatabaseIfNotAvailable();
 			}
-			//All other database transformations need to be done after this statement.
 		}
 		catch (...) {
 			initializeDatabaseIfNotAvailable();

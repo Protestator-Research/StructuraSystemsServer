@@ -8,8 +8,8 @@
     ],
     "custom_config": {
       "mongo_address": "localhost:27017",
-      "mongo_username": "",
-      "mongo_password": "",
+      "mongo_username": "root",
+      "mongo_password": "root-password",
       "allowed_origin": ""
     },
     "log": {
