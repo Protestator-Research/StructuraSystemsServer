@@ -13,7 +13,6 @@
 
 namespace SysMLv2::REST
 {
-	class Project;
 	class Branch;
 	class Commit;
 	class DataVersion;
@@ -29,6 +28,7 @@ namespace KerML::Entities {
 namespace StructuraSystems::Server
 {
 	class TwinResponse;
+	class Project;
 
 	class DataBaseController
 	{
@@ -38,11 +38,11 @@ namespace StructuraSystems::Server
 		static DataBaseController* getInstance();
 
 
-		std::vector<std::shared_ptr<SysMLv2::REST::Project>> getAllProjects();
-		void addMultibleProjects(std::vector<std::shared_ptr<SysMLv2::REST::Project>> projects);
-		void addProject(std::shared_ptr<SysMLv2::REST::Project> project);
-		void updateProject(std::shared_ptr<SysMLv2::REST::Project> project);
-		bool deleteProject(std::shared_ptr<SysMLv2::REST::Project> project);
+		std::vector<std::shared_ptr<Project>> getAllProjects();
+		void addMultibleProjects(std::vector<std::shared_ptr<Project>> projects);
+		void addProject(std::shared_ptr<Project> project);
+		void updateProject(std::shared_ptr<Project> project);
+		bool deleteProject(std::shared_ptr<Project> project);
 
 		void addMultibleBranches(std::map<boost::uuids::uuid, std::vector<std::shared_ptr<SysMLv2::REST::Branch>>> projectBranchMap);
 		void addBranch(boost::uuids::uuid projectId, std::shared_ptr<SysMLv2::REST::Branch> branch);

@@ -2,6 +2,7 @@
 #include "../Entities/json/TwinResponse.h"
 #include "VersionController.h"
 #include "../Entities/db/Version.hpp"
+#include "../Entities/db/Project.h"
 
 #include <bsoncxx/builder/basic/document.hpp>
 #include <bsoncxx/builder/stream/document.hpp>
@@ -14,6 +15,7 @@
 #include <boost/uuid/uuid_io.hpp>
 #include <kerml/root/annotations/TextualRepresentation.h>
 #include <nlohmann/json_fwd.hpp>
+#include <sysmlv2/rest/entities/Tag.h>
 #include <sysmlv2/rest/entities/Branch.h>
 #include <sysmlv2/rest/entities/JSONEntities.h>
 #include <sysmlv2/rest/entities/Project.h>
@@ -25,9 +27,6 @@
 #include <iostream>
 #include <fstream>
 #include <iomanip>
-#include <sysmlv2/rest/entities/Tag.h>
-
-
 
 
 namespace StructuraSystems::Server
@@ -42,29 +41,29 @@ namespace StructuraSystems::Server
 		return Instance;
 	}
 
-	std::vector<std::shared_ptr<SysMLv2::REST::Project>> DataBaseController::getAllProjects()
+	std::vector<std::shared_ptr<Project>> DataBaseController::getAllProjects()
 	{
 		auto collection = database["projects"];
 		auto cursor = collection.find({});
 
-		std::vector<std::shared_ptr<SysMLv2::REST::Project>> returnValue;
+		std::vector<std::shared_ptr<Project>> returnValue;
 		for (auto&& doc : cursor)
 		{
 			std::string dbString = bsoncxx::to_json(doc);
 			replace(dbString, "_id", "@id");
-			const auto project = std::make_shared<SysMLv2::REST::Project>(dbString);
+			const auto project = std::make_shared<Project>(dbString);
 			returnValue.push_back(project);
 		}
 		std::cout << returnValue.size() << " Projects loaded from Database." << std::endl;
 		return returnValue;
 	}
 
-	void DataBaseController::addMultibleProjects(std::vector<std::shared_ptr<SysMLv2::REST::Project>> projects)
+	void DataBaseController::addMultibleProjects(std::vector<std::shared_ptr<Project>> projects)
 	{
 		std::vector<bsoncxx::document::value> dbProjects;
 		for (const auto& project : projects)
 		{
-			std::string jsonString = project->serializeToJson();
+			std::string jsonString = project->getDataBaseString();
 			replace(jsonString, "@id", "_id");
 			nlohmann::json json = nlohmann::json::parse(jsonString);
 			dbProjects.push_back(bsoncxx::from_json(json.dump()));
@@ -72,17 +71,17 @@ namespace StructuraSystems::Server
 		database["projects"].insert_many(dbProjects);
 	}
 
-	void DataBaseController::addProject(std::shared_ptr<SysMLv2::REST::Project> project)
+	void DataBaseController::addProject(std::shared_ptr<Project> project)
 	{
-		std::string jsonString = project->serializeToJson();
+		std::string jsonString = project->getDataBaseString();
 		replace(jsonString, "@id", "_id");
 		nlohmann::json json = nlohmann::json::parse(jsonString);
 		database["projects"].insert_one(bsoncxx::from_json(json.dump()));
 	}
 
-	void DataBaseController::updateProject(std::shared_ptr<SysMLv2::REST::Project> project)
+	void DataBaseController::updateProject(std::shared_ptr<Project> project)
 	{
-		std::string jsonString = project->serializeToJson();
+		std::string jsonString = project->getDataBaseString();
 		replace(jsonString, "@id", "_id");
 		nlohmann::json json = nlohmann::json::parse(jsonString);
 		auto query_filter = bsoncxx::builder::basic::make_document(bsoncxx::builder::basic::kvp("_id", boost::uuids::to_string(project->getId())));
@@ -91,7 +90,7 @@ namespace StructuraSystems::Server
 		auto result = database["projects"].update_one(query_filter.view(), update_project.view());
 	}
 
-	bool DataBaseController::deleteProject(std::shared_ptr<SysMLv2::REST::Project> project)
+	bool DataBaseController::deleteProject(std::shared_ptr<Project> project)
 	{
 		auto result = database["projects"].delete_one(bsoncxx::builder::basic::make_document(bsoncxx::builder::basic::kvp("_id", boost::uuids::to_string(project->getId())), bsoncxx::builder::basic::kvp("name", project->getName()), bsoncxx::builder::basic::kvp("description", project->getDescription()), bsoncxx::builder::basic::kvp("defaultBranch", "{\"@id\":" + boost::uuids::to_string(project->getDefaultBranch()->getId()) + "}")));
 		return (result.has_value() && (result.value().deleted_count() > 0));
