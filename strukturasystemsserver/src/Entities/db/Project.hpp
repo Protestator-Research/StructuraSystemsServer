@@ -33,7 +33,7 @@ namespace StructuraSystems::Server {
             : SysMLv2::REST::Project(projectName, projectDescription, branchName) {
         }
 
-        Project(const std::string &projectName, const std::string &projectDescription, const std::string &branchName, std::string owner, std::string owningGroup)
+        Project(const std::string &projectName, const std::string &projectDescription, const std::string &branchName, const std::string& owner, const std::string& owningGroup)
             : SysMLv2::REST::Project(projectName, projectDescription, branchName) {
             Owner = owner;
             OwningGroup = owningGroup;
