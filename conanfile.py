@@ -7,7 +7,7 @@ from sys import platform
 
 
 class CppStructuraSystemsRecipe(ConanFile):
-    name = "structura-systems-server"
+    name = "structurasystemsserver"
     package_type = "application"
 
     # Optional metadata
