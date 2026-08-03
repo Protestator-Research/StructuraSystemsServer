@@ -9,7 +9,7 @@
 #include <sysmlv2/rest/entities/Project.h>
 
 namespace StructuraSystems::Server {
-    class Project : SysMLv2::REST::Project {
+    class Project : public SysMLv2::REST::Project {
     public:
         Project() = default;
 
@@ -19,14 +19,21 @@ namespace StructuraSystems::Server {
 
         explicit Project(const std::string &JsonString)
             : SysMLv2::REST::Project(JsonString) {
-            const auto = nlohmann::json
+            const auto jsonElements = nlohmann::json::parse(JsonString);
+            
+            if(jsonElements.contains("owner"))
+                Owner = jsonElements["owner"];
+            
+            if(jsonElements.contains("owningGroup"))
+                OwningGroup = jsonElements["owningGroup"];
+
         }
 
         Project(const std::string &projectName, const std::string &projectDescription, const std::string &branchName)
             : SysMLv2::REST::Project(projectName, projectDescription, branchName) {
         }
 
-        Project(const std::string &projectName, const std::string &projectDescription, const std::string &branchName, std::string owner, std::string owningGroup)
+        Project(const std::string &projectName, const std::string &projectDescription, const std::string &branchName, const std::string& owner, const std::string& owningGroup)
             : SysMLv2::REST::Project(projectName, projectDescription, branchName) {
             Owner = owner;
             OwningGroup = owningGroup;
@@ -41,8 +48,15 @@ namespace StructuraSystems::Server {
         }
 
         std::string getDataBaseString() {
-            return "";
+            auto json = nlohmann::json::parse(SysMLv2::REST::Project::serializeToJson());
+            if(!Owner.empty())
+                json["owner"] = Owner;
+            if(!OwningGroup.empty())
+                json["owningGroup"] = OwningGroup;
+            
+            return json.dump(JSON_INTENT);;
         }
+
     private:
         std::string Owner = "";
         std::string OwningGroup = "";

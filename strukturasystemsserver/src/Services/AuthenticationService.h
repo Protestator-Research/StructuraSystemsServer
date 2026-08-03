@@ -5,6 +5,7 @@
 #include <map>
 #include <boost/uuid/uuid.hpp>
 #include <drogon/HttpFilter.h>
+
 #include "../Entities/db/User.hpp"
 
 namespace StructuraSystems::Server

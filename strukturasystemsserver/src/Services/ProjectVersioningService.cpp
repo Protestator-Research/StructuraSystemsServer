@@ -11,6 +11,7 @@
 #include <sysmlv2/rest/entities/Tag.h>
 
 #include "../Controller/CommitController.hpp"
+#include "../Entities/db/Project.hpp"
 
 namespace StructuraSystems::Server
 {
@@ -211,7 +212,7 @@ namespace StructuraSystems::Server
 			if (branch->getId()==branchId)
 			{
 				project->setDefaultBranch(branch);
-				DBController->updateProject(project);
+				DBController->updateProject(std::dynamic_pointer_cast<StructuraSystems::Server::Project>(project));
 				return project;
 			}
 		}
