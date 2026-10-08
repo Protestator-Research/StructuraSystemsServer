@@ -89,7 +89,7 @@ namespace StructuraSystems::Server
 		mongocxx::database database;
 
 		void initializeDatabaseIfNotAvailable();
-		void checkDatabaseState();
+		bool checkDatabaseState();
 
 		void deleteDatabaseIfDebug();
 		bool replace(std::string& str, const std::string& from, const std::string& to);

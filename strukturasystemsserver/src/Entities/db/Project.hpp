@@ -6,6 +6,8 @@
 #define STRUCTURASYSTEMSSERVER_PROJECT_H
 
 #include <nlohmann/json.hpp>
+#include <string>
+#include <utility>
 #include <sysmlv2/rest/entities/Project.h>
 
 namespace StructuraSystems::Server {
@@ -27,6 +29,8 @@ namespace StructuraSystems::Server {
             if(jsonElements.contains("owningGroup"))
                 OwningGroup = jsonElements["owningGroup"];
 
+            if(jsonElements.contains("isLibrary") && jsonElements["isLibrary"].is_boolean())
+                IsLibrary = jsonElements["isLibrary"].get<bool>();
         }
 
         Project(const std::string &projectName, const std::string &projectDescription, const std::string &branchName)
@@ -47,12 +51,30 @@ namespace StructuraSystems::Server {
             return OwningGroup;
         }
 
+        void setOwner(std::string owner) {
+            Owner = std::move(owner);
+        }
+
+        void setOwningGroup(std::string owningGroup) {
+            OwningGroup = std::move(owningGroup);
+        }
+
+        bool isLibrary() const {
+            return IsLibrary;
+        }
+
+        void setIsLibrary(bool isLibrary) {
+            IsLibrary = isLibrary;
+        }
+
         std::string getDataBaseString() {
             auto json = nlohmann::json::parse(SysMLv2::REST::Project::serializeToJson());
             if(!Owner.empty())
                 json["owner"] = Owner;
             if(!OwningGroup.empty())
                 json["owningGroup"] = OwningGroup;
+            if(IsLibrary)
+                json["isLibrary"] = true;
             
             return json.dump(JSON_INTENT);;
         }
@@ -60,6 +82,7 @@ namespace StructuraSystems::Server {
     private:
         std::string Owner = "";
         std::string OwningGroup = "";
+        bool IsLibrary = false;
     };
 } // StructuraSystems::Server
 

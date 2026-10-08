@@ -84,7 +84,12 @@ int main() {
     [[maybe_unused]] const auto trustedProxies = readConfigStringArray(customConfig, "trusted_proxies", {"127.0.0.1"});
     [[maybe_unused]] const auto allowedOrigins = readConfigStringArray(customConfig, "allowed_origins", {});
 
-    [[maybe_unused]] auto dbController = StructuraSystems::Server::DataBaseController::createInstance(dbAddressArg, dbUsernameArg, dbPasswordArg, dbDatabaseArg);
+    try {
+        StructuraSystems::Server::DataBaseController::createInstance(dbAddressArg, dbUsernameArg, dbPasswordArg, dbDatabaseArg);
+    } catch (const std::exception& e) {
+        std::cerr << "Database startup failed: " << e.what() << std::endl;
+        return 1;
+    }
     [[maybe_unused]] auto jwtFilter = StructuraSystems::Server::JwtFilter();
     [[maybe_unused]] auto adminFilter = StructuraSystems::Server::AdministrationFilter();
 

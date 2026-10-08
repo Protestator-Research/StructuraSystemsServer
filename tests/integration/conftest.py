@@ -4,6 +4,7 @@ import subprocess
 import tempfile
 import time
 import uuid
+from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
@@ -43,21 +44,50 @@ def base_url():
     return f"http://127.0.0.1:{TEST_PORT}"
 
 
-@pytest.fixture(scope="session")
-def server(base_url):
-    assert TEST_DB != "structura_systems"
-    client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000)
-    client.drop_database(TEST_DB)
-    client.close()
+def wait_for_ready(proc, base_url, dump_output, timeout=60):
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if proc.poll() is not None:
+            dump_output()
+            pytest.fail(f"server exited early with code {proc.returncode}")
+        try:
+            requests.post(f"{base_url}/login", json={}, timeout=2)
+            return
+        except requests.exceptions.RequestException:
+            time.sleep(0.5)
+    dump_output()
+    pytest.fail(f"server did not become ready within {timeout} s")
+
+
+def server_command():
+    # The Conan run environment provides the shared library search path.
+    if CONAN_RUN_ENV.exists():
+        return ["bash", "-c", 'source "$1" && exec "$2"', "bash",
+                str(CONAN_RUN_ENV), str(SERVER_BINARY)]
+    return [str(SERVER_BINARY)]
+
+
+@contextmanager
+def start_server(db_name, port, extra_env=None, drop_db=True, expect_ready=True):
+    """Start a server on the given database and yield (process, output_path).
+
+    With expect_ready=False the caller deals with start-up failures itself.
+    """
+    assert db_name != "structura_systems"
+    assert db_name.startswith("structura_systems_")
+    if drop_db:
+        client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000)
+        client.drop_database(db_name)
+        client.close()
 
     tmp = Path(tempfile.mkdtemp(prefix="structura-test-"))
     config = {
-        "listeners": [{"address": "127.0.0.1", "port": TEST_PORT, "https": False}],
+        "listeners": [{"address": "127.0.0.1", "port": port, "https": False}],
         "custom_config": {
             "mongo_address": "localhost:27017",
             "mongo_username": "root",
             "mongo_password": "root-password",
-            "mongo_database": TEST_DB,
+            "mongo_database": db_name,
             "allowed_origins": [],
         },
         "log": {
@@ -76,53 +106,49 @@ def server(base_url):
     env["STRUCTURA_ADMIN_PASSWORD"] = ADMIN_PASSWORD
     for name in ("MONGO_ADDRESS", "MONGO_USERNAME", "MONGO_PASSWORD", "MONGO_DATABASE"):
         env.pop(name, None)
+    env.update(extra_env or {})
+
+    def dump_output():
+        print("---- server output ----")
+        print(output_path.read_text(errors="replace"))
 
     with open(output_path, "wb") as out:
-        # The Conan run environment provides the shared library search path.
-        if CONAN_RUN_ENV.exists():
-            command = ["bash", "-c", 'source "$1" && exec "$2"', "bash",
-                       str(CONAN_RUN_ENV), str(SERVER_BINARY)]
-        else:
-            command = [str(SERVER_BINARY)]
         proc = subprocess.Popen(
-            command,
+            server_command(),
             cwd=str(REPO_ROOT),
             env=env,
             stdout=out,
             stderr=subprocess.STDOUT,
         )
-
-        def dump_output():
-            print("---- server output ----")
-            print(output_path.read_text(errors="replace"))
-
         try:
-            deadline = time.time() + 60
-            ready = False
-            while time.time() < deadline:
-                if proc.poll() is not None:
-                    dump_output()
-                    pytest.fail(f"server exited early with code {proc.returncode}")
-                try:
-                    requests.post(f"{base_url}/login", json={}, timeout=2)
-                    ready = True
-                    break
-                except requests.exceptions.RequestException:
-                    time.sleep(0.5)
-            if not ready:
-                dump_output()
-                pytest.fail("server did not become ready within 60 s")
-            yield proc
+            if expect_ready:
+                wait_for_ready(proc, f"http://127.0.0.1:{port}", dump_output)
+            yield proc, output_path
         except BaseException:
             dump_output()
             raise
         finally:
-            proc.terminate()
+            if proc.poll() is None:
+                proc.terminate()
             try:
                 proc.wait(timeout=15)
             except subprocess.TimeoutExpired:
                 proc.kill()
                 proc.wait()
+
+
+@pytest.fixture(scope="session")
+def server(base_url):
+    assert TEST_DB != "structura_systems"
+    with start_server(TEST_DB, TEST_PORT) as (proc, _):
+        yield proc
+
+
+@pytest.fixture(scope="session")
+def mongo():
+    client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000)
+    yield client
+    client.close()
 
 
 @pytest.fixture(scope="session")

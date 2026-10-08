@@ -3,6 +3,7 @@
 #include "VersionController.h"
 #include "../Entities/db/Version.hpp"
 #include "../Entities/db/Project.hpp"
+#include "DatabaseMigrator.h"
 
 #include <bsoncxx/builder/basic/document.hpp>
 #include <bsoncxx/builder/stream/document.hpp>
@@ -452,6 +453,7 @@ namespace StructuraSystems::Server
 				<< "securityString" << user.hashedPassword()
 				<< "group" << user.group()
 				<< "role" << (int)user.role()
+				<< "mustChangePassword" << user.mustChangePassword()
 			<< bsoncxx::builder::stream::close_document
 		<< bsoncxx::builder::stream::finalize;
 
@@ -490,7 +492,8 @@ namespace StructuraSystems::Server
 // #ifndef NDEBUG
 		// deleteDatabaseIfDebug();
 // #endif
-		checkDatabaseState();
+		const bool freshlyInitialized = checkDatabaseState();
+		DatabaseMigrator(database).run(freshlyInitialized);
 	}
 
 	void DataBaseController::addVersionToDatabase() {
@@ -608,6 +611,8 @@ namespace StructuraSystems::Server
 			std::make_shared<Project>("VerificationCases.sysml", "Preloaded Project", "Main"),
 			std::make_shared<Project>("Views.sysml", "Preloaded Project", "Main")
 		};
+		for (const auto& project : projects)
+			project->setIsLibrary(true);
 		addMultibleProjects(projects);
 
 		std::map<boost::uuids::uuid, std::vector<std::shared_ptr<SysMLv2::REST::Branch>>> projectBranchMap;
@@ -648,21 +653,35 @@ namespace StructuraSystems::Server
 		addMultibleElements(commitIdElementsMap);
 	}
 
-	void DataBaseController::checkDatabaseState() {
-		try
-		{
-			const auto& collectionNames = database.list_collection_names();
-			if (collectionNames.size()==0)
-				initializeDatabaseIfNotAvailable();
-			// This else clause only exists, because this project started as a sidequest in my dissertation.
-			else if (std::find(collectionNames.begin(), collectionNames.end(), VERSION_COLLECTION_IDENTIFIER) == collectionNames.end()) {
-				deleteDatabaseIfDebug();
-				initializeDatabaseIfNotAvailable();
+	bool DataBaseController::checkDatabaseState() {
+		const auto collectionNames = database.list_collection_names();
+		if (collectionNames.empty()) {
+			initializeDatabaseIfNotAvailable();
+			return true;
+		}
+
+		if (std::find(collectionNames.begin(), collectionNames.end(), VERSION_COLLECTION_IDENTIFIER) != collectionNames.end())
+			return false;
+
+		// The versions collection is missing although other collections exist. That is not a fresh database.
+		// Dropping is only ever allowed in debug builds and only if no collection holds any data.
+#ifndef NDEBUG
+		bool allEmpty = true;
+		for (const auto& name : collectionNames) {
+			if (database[name].count_documents({}) > 0) {
+				allEmpty = false;
+				break;
 			}
 		}
-		catch (...) {
+		if (allEmpty) {
+			deleteDatabaseIfDebug();
 			initializeDatabaseIfNotAvailable();
+			return true;
 		}
+#endif
+		std::cerr << "[database] ERROR: The database contains collections but no '" << VERSION_COLLECTION_IDENTIFIER
+			<< "' collection and is not empty. Refusing to start to avoid data loss. Restore a backup or check the database name." << std::endl;
+		throw std::runtime_error("Database state not recognised, refusing to initialise a non-empty database");
 	}
 
 	void DataBaseController::deleteDatabaseIfDebug()

@@ -17,6 +17,8 @@ set(SOURCES
         src/Controller/ProjectController.hpp
         src/Controller/DataBaseController.h
         src/Controller/DataBaseController.cpp
+        src/Controller/DatabaseMigrator.h
+        src/Controller/DatabaseMigrator.cpp
         src/Controller/AuthenticationController.hpp
         src/Controller/ElementsController.hpp
         src/Controller/CommitController.hpp
