@@ -22,9 +22,6 @@ namespace StructuraSystems::Server {
     std::shared_ptr<TwinResponse> DigitalTwinService::createTwin(std::string name, std::shared_ptr<SysMLv2::REST::Project> project, std::shared_ptr<SysMLv2::REST::Commit> commit) {
         const auto twin = std::make_shared<TwinResponse>(name, project, commit);
 
-        if (ProjectIdTwinMap.find(project->getId()) != ProjectIdTwinMap.end())
-            ProjectIdTwinMap[project->getId()] = std::vector<std::shared_ptr<TwinResponse>>();
-
         ProjectIdTwinMap[project->getId()].push_back(twin);
         DBController->addTwin(project->getId(),twin);
 
@@ -32,10 +29,14 @@ namespace StructuraSystems::Server {
     }
 
     std::vector<std::shared_ptr<TwinResponse>> DigitalTwinService::getAllTwinsForProject(std::shared_ptr<SysMLv2::REST::Project> project) {
-        return ProjectIdTwinMap[project->getId()];
+        const auto twins = ProjectIdTwinMap.find(project->getId());
+        if (twins == ProjectIdTwinMap.end())
+            return {};
+        return twins->second;
     }
 
     DigitalTwinService::DigitalTwinService() {
         DBController = DataBaseController::getInstance();
+        ProjectIdTwinMap = DBController->getAllTwins();
     }
 }

@@ -52,10 +52,39 @@ namespace StructuraSystems::Server {
         }
 
         void postTwin(const drogon::HttpRequestPtr & request, std::function<void(const drogon::HttpResponsePtr&)>&& callback, const std::string& projectId) {
-            const std::string json = request->getJsonObject()->toStyledString();
-            const std::shared_ptr<TwinRequest> twinRequest = std::make_shared<TwinRequest>(json);
+            const auto jsonObject = request->getJsonObject();
+            if (jsonObject == nullptr)
+            {
+                callback(drogon::HttpResponse::newHttpResponse(drogon::k400BadRequest, drogon::CT_APPLICATION_JSON));
+                return;
+            }
+
+            std::shared_ptr<TwinRequest> twinRequest;
+            try {
+                twinRequest = std::make_shared<TwinRequest>(jsonObject->toStyledString());
+            } catch (...) {
+                twinRequest = nullptr;
+            }
+            if (twinRequest == nullptr || twinRequest->name().empty() || twinRequest->referencedCommit() == nullptr)
+            {
+                callback(drogon::HttpResponse::newHttpResponse(drogon::k400BadRequest, drogon::CT_APPLICATION_JSON));
+                return;
+            }
+
             const auto project = ProjectNavigationService->getProjectById(boost::uuids::string_generator()(projectId));
+            if (project == nullptr)
+            {
+                callback(drogon::HttpResponse::newHttpResponse(drogon::k404NotFound, drogon::CT_APPLICATION_JSON));
+                return;
+            }
+
             const auto commit = ProjectVerService->getCommitById(project,twinRequest->referencedCommit()->getId());
+            if (commit == nullptr)
+            {
+                callback(drogon::HttpResponse::newHttpResponse(drogon::k404NotFound, drogon::CT_APPLICATION_JSON));
+                return;
+            }
+
             const auto newDigitalTwin = DTService->createTwin(twinRequest->name(), project,commit);
 
             const auto response = drogon::HttpResponse::newHttpResponse(drogon::k201Created, drogon::CT_APPLICATION_JSON);

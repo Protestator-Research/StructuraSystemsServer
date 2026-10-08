@@ -6,9 +6,10 @@
 #include <map>
 #include <boost/uuid/uuid.hpp>
 #include <mongocxx/instance.hpp>
-#include <mongocxx/uri.hpp>
+// mongocxx 4.6: uri.hpp must come after client.hpp, otherwise to_v1() in options/find.hpp is ambiguous
 #include <mongocxx/client.hpp>
 #include <mongocxx/database.hpp>
+#include <mongocxx/uri.hpp>
 #include "../Entities/db/User.hpp"
 
 namespace SysMLv2::REST
