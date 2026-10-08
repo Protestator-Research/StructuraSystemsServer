@@ -51,7 +51,7 @@ namespace StructuraSystems::Server {
 	std::string AuthenticationService::authenticateUserWith(const std::string& name, const std::string& password) {
 
 		if (!UsernameHashMap.contains(name))
-			throw new std::runtime_error("Username or password wrong.");
+			throw std::runtime_error("Username or password wrong.");
 
 		const auto securityString = UsernameHashMap[name].hashedPassword();
 
@@ -79,7 +79,7 @@ namespace StructuraSystems::Server {
 				return encode64(boost::uuids::to_string(UsernameInstanceMap[name]->InstanceId));
 			}
 		}
-		throw new std::runtime_error("Username or password wrong.");
+		throw std::runtime_error("Username or password wrong.");
 	}
 
 	void AuthenticationService::addUser(std::string username, std::string password, USER_ROLE role)

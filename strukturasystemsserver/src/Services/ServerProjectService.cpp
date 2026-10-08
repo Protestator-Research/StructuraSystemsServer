@@ -67,7 +67,11 @@ namespace StructuraSystems::Server
 	}
 
 	std::shared_ptr<SysMLv2::REST::Project> ServerProjectService::deleteProject(boost::uuids::uuid projectId) {
-		const auto& deletedProject = std::dynamic_pointer_cast<Project>(deleteProject(projectId));
+		const auto baseDeleted = SysMLv2::API::ProjectService::deleteProject(projectId);
+		if (baseDeleted == nullptr)
+			return nullptr;
+
+		const auto deletedProject = std::dynamic_pointer_cast<Project>(baseDeleted);
 		DBController->deleteProject(deletedProject);
 		return deletedProject;
 	}

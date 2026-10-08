@@ -15,6 +15,7 @@
 #include "../Services/ServerProjectService.h"
 #include "../Services/DigitalTwinService.h"
 #include "../Filter/JwtFilter.hpp"
+#include "Helper/RequestHelper.hpp"
 
 namespace StructuraSystems::Server {
     class DigitalTwinController : public drogon::HttpController<StructuraSystems::Server::DigitalTwinController> {
@@ -26,7 +27,14 @@ namespace StructuraSystems::Server {
         METHOD_LIST_END
 
         void getAllTwins(const drogon::HttpRequestPtr &, std::function<void(const drogon::HttpResponsePtr&)>&& callback, const std::string& projectId) {
-            const auto project = ProjectNavigationService->getProjectById(boost::uuids::string_generator()(projectId));
+            const auto parsedProjectId = parseUuid(projectId);
+            if (!parsedProjectId)
+            {
+                callback(jsonError(drogon::k400BadRequest, "Invalid project id."));
+                return;
+            }
+
+            const auto project = ProjectNavigationService->getProjectById(*parsedProjectId);
 
             if (project==nullptr)
             {
@@ -52,40 +60,51 @@ namespace StructuraSystems::Server {
         }
 
         void postTwin(const drogon::HttpRequestPtr & request, std::function<void(const drogon::HttpResponsePtr&)>&& callback, const std::string& projectId) {
-            const auto jsonObject = request->getJsonObject();
+            const auto jsonObject = requireJson(request);
             if (jsonObject == nullptr)
             {
-                callback(drogon::HttpResponse::newHttpResponse(drogon::k400BadRequest, drogon::CT_APPLICATION_JSON));
+                callback(jsonError(drogon::k400BadRequest, "Missing or invalid JSON body."));
                 return;
             }
 
             std::shared_ptr<TwinRequest> twinRequest;
+            std::string twinName;
+            std::shared_ptr<SysMLv2::REST::Commit> referencedCommit;
             try {
                 twinRequest = std::make_shared<TwinRequest>(jsonObject->toStyledString());
+                twinName = twinRequest->name();
+                referencedCommit = twinRequest->referencedCommit();
             } catch (...) {
                 twinRequest = nullptr;
             }
-            if (twinRequest == nullptr || twinRequest->name().empty() || twinRequest->referencedCommit() == nullptr)
+            if (twinRequest == nullptr || twinName.empty() || referencedCommit == nullptr)
             {
-                callback(drogon::HttpResponse::newHttpResponse(drogon::k400BadRequest, drogon::CT_APPLICATION_JSON));
+                callback(jsonError(drogon::k400BadRequest, "Invalid twin request."));
                 return;
             }
 
-            const auto project = ProjectNavigationService->getProjectById(boost::uuids::string_generator()(projectId));
+            const auto parsedProjectId = parseUuid(projectId);
+            if (!parsedProjectId)
+            {
+                callback(jsonError(drogon::k400BadRequest, "Invalid project id."));
+                return;
+            }
+
+            const auto project = ProjectNavigationService->getProjectById(*parsedProjectId);
             if (project == nullptr)
             {
                 callback(drogon::HttpResponse::newHttpResponse(drogon::k404NotFound, drogon::CT_APPLICATION_JSON));
                 return;
             }
 
-            const auto commit = ProjectVerService->getCommitById(project,twinRequest->referencedCommit()->getId());
+            const auto commit = ProjectVerService->getCommitById(project,referencedCommit->getId());
             if (commit == nullptr)
             {
                 callback(drogon::HttpResponse::newHttpResponse(drogon::k404NotFound, drogon::CT_APPLICATION_JSON));
                 return;
             }
 
-            const auto newDigitalTwin = DTService->createTwin(twinRequest->name(), project,commit);
+            const auto newDigitalTwin = DTService->createTwin(twinName, project,commit);
 
             const auto response = drogon::HttpResponse::newHttpResponse(drogon::k201Created, drogon::CT_APPLICATION_JSON);
             response->setBody(newDigitalTwin->serializeToJson());

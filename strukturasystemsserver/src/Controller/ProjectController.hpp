@@ -8,6 +8,7 @@
 #include "../Services/ServerProjectService.h"
 #include "../Entities/db/Project.hpp"
 #include "../Filter/JwtFilter.hpp"
+#include "Helper/RequestHelper.hpp"
 
 namespace StructuraSystems::Server
 {
@@ -58,7 +59,14 @@ namespace StructuraSystems::Server
 			const auto authHeader = req->getHeader("Authorization");
 			const auto& user = AuthenticationService::getInstance()->getUserFromDatabase(authHeader.substr(7));
 
-			const auto project = _ProjectService->getProjectById(boost::uuids::string_generator()(projectId));
+			const auto parsedProjectId = parseUuid(projectId);
+			if (!parsedProjectId)
+			{
+				callback(jsonError(drogon::k400BadRequest, "Invalid project id."));
+				return;
+			}
+
+			const auto project = _ProjectService->getProjectById(*parsedProjectId);
 			if (project==nullptr)
             {
                 const auto notFoundResponse = drogon::HttpResponse::newHttpResponse(drogon::k404NotFound, drogon::CT_APPLICATION_JSON);
@@ -82,31 +90,63 @@ namespace StructuraSystems::Server
 			const auto authHeader = req->getHeader("Authorization");
 			const auto& user = AuthenticationService::getInstance()->getUserFromDatabase(authHeader.substr(7));
 
-			const auto project = _ProjectService->deleteProject(boost::uuids::string_generator()(projectId));
-			if (project==nullptr)
+			const auto parsedProjectId = parseUuid(projectId);
+			if (!parsedProjectId)
+			{
+				callback(jsonError(drogon::k400BadRequest, "Invalid project id."));
+				return;
+			}
+
+			const auto existingProject = _ProjectService->getProjectById(*parsedProjectId);
+			if (existingProject==nullptr)
             {
                 const auto error_response = drogon::HttpResponse::newHttpResponse(drogon::k404NotFound, drogon::CT_APPLICATION_JSON);
                 callback(error_response);
                 return;
             }
-			if (!isUsersAccessAllowed(user,std::dynamic_pointer_cast<Project>(project)))
+			if (!isUsersAccessAllowed(user,std::dynamic_pointer_cast<Project>(existingProject)))
 			{
 				const auto error_response = drogon::HttpResponse::newHttpResponse(drogon::k401Unauthorized, drogon::CT_APPLICATION_JSON);
 				callback(error_response);
 				return;
 			}
 
+			const auto project = _ProjectService->deleteProject(*parsedProjectId);
+			if (project==nullptr)
+            {
+                const auto error_response = drogon::HttpResponse::newHttpResponse(drogon::k404NotFound, drogon::CT_APPLICATION_JSON);
+                callback(error_response);
+                return;
+            }
+
 			response->setBody(project->serializeToJson());
 			callback(response);
 		}
 
 		void createProject(const drogon::HttpRequestPtr &request, std::function<void(const drogon::HttpResponsePtr&)>&& callback) const {
-			auto requestObject = *request->getJsonObject();
+			const auto jsonObject = requireJson(request);
+			if (jsonObject == nullptr || !jsonObject->isObject())
+			{
+				callback(jsonError(drogon::k400BadRequest, "Missing or invalid JSON body."));
+				return;
+			}
+			const auto& requestObject = *jsonObject;
 
 			const auto owner = request->getParameter("owner");
 			const auto group = request->getParameter("owningGroup");
 
-			const auto newProject = _ProjectService->createProject(requestObject["name"].asString(),requestObject["description"].asString(), owner,group);
+			std::string name;
+			std::string description;
+			try {
+				name = requestObject["name"].asString();
+				description = requestObject["description"].asString();
+			}
+			catch (const Json::Exception&) {
+				callback(jsonError(drogon::k400BadRequest, "Invalid project description."));
+				return;
+			}
+
+			const auto newProject = _ProjectService->createProject(name, description, owner, group);
 			const auto response = drogon::HttpResponse::newHttpResponse(drogon::k201Created, drogon::CT_APPLICATION_JSON);
 			response->setBody(newProject->serializeToJson());
 			callback(response);

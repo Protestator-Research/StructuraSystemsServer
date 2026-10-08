@@ -12,6 +12,7 @@
 #include "../Entities/json/UserResponse.h"
 #include "../Entities/json/UserRequest.h"
 #include "../Filter/AdministrationFilter.hpp"
+#include "Helper/RequestHelper.hpp"
 
 namespace StructuraSystems::Server
 {
@@ -31,9 +32,9 @@ namespace StructuraSystems::Server
 
 		void login(const drogon::HttpRequestPtr& request, std::function<void(const drogon::HttpResponsePtr&)>&& callback) const
 		{
-			const auto payload = request->getJsonObject();
-			if (!payload) {
-				callback(drogon::HttpResponse::newHttpResponse(drogon::k400BadRequest, drogon::CT_TEXT_PLAIN));
+			const auto payload = requireJson(request);
+			if (!payload || !payload->isObject()) {
+				callback(jsonError(drogon::k400BadRequest, "Missing or invalid JSON body."));
 				return;
 			}
 			try {
@@ -53,14 +54,27 @@ namespace StructuraSystems::Server
 		}
 
 		void registerUser(const drogon::HttpRequestPtr& request, std::function<void(const drogon::HttpResponsePtr&)>&& callback) const {
-			const auto payload = request->getJsonObject();
+			const auto payload = requireJson(request);
 			if (!payload) {
-				callback(drogon::HttpResponse::newHttpResponse(drogon::k400BadRequest, drogon::CT_TEXT_PLAIN));
+				callback(jsonError(drogon::k400BadRequest, "Missing or invalid JSON body."));
+				return;
+			}
+			std::shared_ptr<UserRequest> userRequest;
+			std::string requestedUsername;
+			std::string requestedPassword;
+			int requestedRole = 0;
+			try {
+				userRequest = std::make_shared<UserRequest>(payload->toStyledString());
+				requestedUsername = userRequest->getUsername();
+				requestedPassword = userRequest->getPassword();
+				requestedRole = userRequest->getUserRole();
+			}
+			catch (...) {
+				callback(jsonError(drogon::k400BadRequest, "Invalid user request."));
 				return;
 			}
 			try {
-				auto reqUser = UserRequest(payload->toStyledString());
-				AuthService->addUser(reqUser.getUsername(),reqUser.getPassword(),(USER_ROLE)reqUser.getUserRole());
+				AuthService->addUser(requestedUsername,requestedPassword,(USER_ROLE)requestedRole);
 
 				auto response = drogon::HttpResponse::newHttpResponse(drogon::k201Created,drogon::CT_TEXT_PLAIN);
 				callback(response);
@@ -105,14 +119,27 @@ namespace StructuraSystems::Server
 		}
 
 		void changeUser(const drogon::HttpRequestPtr& request, std::function<void(const drogon::HttpResponsePtr&)>&& callback, std::string username) const {
-			const auto payload = request->getJsonObject();
+			const auto payload = requireJson(request);
 			if (!payload) {
-				callback(drogon::HttpResponse::newHttpResponse(drogon::k400BadRequest, drogon::CT_TEXT_PLAIN));
+				callback(jsonError(drogon::k400BadRequest, "Missing or invalid JSON body."));
+				return;
+			}
+			std::shared_ptr<UserRequest> userRequest;
+			std::string requestedUsername;
+			std::string requestedPassword;
+			int requestedRole = 0;
+			try {
+				userRequest = std::make_shared<UserRequest>(payload->toStyledString());
+				requestedUsername = userRequest->getUsername();
+				requestedPassword = userRequest->getPassword();
+				requestedRole = userRequest->getUserRole();
+			}
+			catch (...) {
+				callback(jsonError(drogon::k400BadRequest, "Invalid user request."));
 				return;
 			}
 			try {
-				auto reqUser = UserRequest(payload->toStyledString());
-				AuthService->changeUserInDatabase(std::move(username),reqUser.getPassword(),(USER_ROLE)reqUser.getUserRole());
+				AuthService->changeUserInDatabase(std::move(username),requestedPassword,(USER_ROLE)requestedRole);
 
 				auto response = drogon::HttpResponse::newHttpResponse(drogon::k201Created,drogon::CT_TEXT_PLAIN);
 				callback(response);

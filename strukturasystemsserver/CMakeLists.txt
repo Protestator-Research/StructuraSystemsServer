@@ -20,6 +20,7 @@ set(SOURCES
         src/Controller/AuthenticationController.hpp
         src/Controller/ElementsController.hpp
         src/Controller/CommitController.hpp
+        src/Controller/Helper/RequestHelper.hpp
         src/Entities/json/AuthenticationRequest.h
         src/Entities/json/AuthenticationRequest.cpp
         src/Entities/json/AuthenticationResponse.h

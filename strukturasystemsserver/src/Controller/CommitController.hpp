@@ -15,6 +15,7 @@
 #include "../Services/ProjectVersioningService.h"
 #include "../Services/ServerProjectService.h"
 #include "../Filter/JwtFilter.hpp"
+#include "Helper/RequestHelper.hpp"
 
 namespace StructuraSystems::Server
 {
@@ -37,7 +38,14 @@ namespace StructuraSystems::Server
 
 		void getCommits(const drogon::HttpRequestPtr &, std::function<void(const drogon::HttpResponsePtr&)>&& callback, std::string projectId)
 		{
-			const auto& project = ProjectNavigationService->getProjectById(boost::uuids::string_generator()(projectId));
+			const auto parsedProjectId = parseUuid(projectId);
+			if (!parsedProjectId)
+			{
+				callback(jsonError(drogon::k400BadRequest, "Invalid project id."));
+				return;
+			}
+
+			const auto project = ProjectNavigationService->getProjectById(*parsedProjectId);
 			if (project==nullptr)
             {
                 const auto response = drogon::HttpResponse::newHttpResponse(drogon::k404NotFound, drogon::CT_APPLICATION_JSON);
@@ -61,9 +69,33 @@ namespace StructuraSystems::Server
 
 		void postCommit(const drogon::HttpRequestPtr &request, std::function<void(const drogon::HttpResponsePtr&)>&& callback, const std::string& projectId)
 		{
-			const std::string json = request->getJsonObject()->toStyledString();
-			const auto commitRequest = std::make_shared<SysMLv2::REST::CommitRequest>(json);
-			const auto project = ProjectNavigationService->getProjectById(boost::uuids::string_generator()(projectId));
+			const auto jsonObject = requireJson(request);
+			if (jsonObject == nullptr)
+			{
+				callback(jsonError(drogon::k400BadRequest, "Missing or invalid JSON body."));
+				return;
+			}
+
+			std::shared_ptr<SysMLv2::REST::CommitRequest> commitRequest;
+			std::string commitDescription;
+			std::vector<std::shared_ptr<SysMLv2::REST::DataVersion>> commitChanges;
+			try {
+				commitRequest = std::make_shared<SysMLv2::REST::CommitRequest>(jsonObject->toStyledString());
+				commitDescription = commitRequest->description();
+				commitChanges = commitRequest->changeRequested();
+			}
+			catch (...) {
+				callback(jsonError(drogon::k400BadRequest, "Invalid commit request."));
+				return;
+			}
+			const auto parsedProjectId = parseUuid(projectId);
+			if (!parsedProjectId)
+			{
+				callback(jsonError(drogon::k400BadRequest, "Invalid project id."));
+				return;
+			}
+
+			const auto project = ProjectNavigationService->getProjectById(*parsedProjectId);
 			
 			if (project==nullptr)
             {
@@ -88,7 +120,7 @@ namespace StructuraSystems::Server
 					if (_branch->getName()==branchName)
 						branch = _branch;
 			}
-			const auto commit = ProjectVerService->createCommit(commitRequest->description(), commitRequest->changeRequested(), project, branch);
+			const auto commit = ProjectVerService->createCommit(commitDescription, commitChanges, project, branch);
 
 			const auto response = drogon::HttpResponse::newHttpResponse(drogon::k200OK, drogon::CT_APPLICATION_JSON);
 			response->setBody(commit->serializeToJson());
@@ -97,7 +129,14 @@ namespace StructuraSystems::Server
 
 		void getBranchWithId(const drogon::HttpRequestPtr &, std::function<void(const drogon::HttpResponsePtr&)>&& callback, const std::string& projectId, const std::string& branchId)
 		{
-			const auto project = ProjectNavigationService->getProjectById(boost::uuids::string_generator()(projectId));
+			const auto parsedProjectId = parseUuid(projectId);
+			if (!parsedProjectId)
+			{
+				callback(jsonError(drogon::k400BadRequest, "Invalid project id."));
+				return;
+			}
+
+			const auto project = ProjectNavigationService->getProjectById(*parsedProjectId);
 			
 			if (project==nullptr)
             {
@@ -106,7 +145,14 @@ namespace StructuraSystems::Server
                 return;
             }
 
-			auto _branchId = boost::uuids::string_generator()(branchId);
+			const auto parsedBranchId = parseUuid(branchId);
+			if (!parsedBranchId)
+			{
+				callback(jsonError(drogon::k400BadRequest, "Invalid branch id."));
+				return;
+			}
+
+			auto _branchId = *parsedBranchId;
 			const auto branch = ProjectVerService->getBranchById(project, _branchId);
 
 			if (branch==nullptr)
@@ -123,7 +169,14 @@ namespace StructuraSystems::Server
 
 		void getCommitId(const drogon::HttpRequestPtr &, std::function<void(const drogon::HttpResponsePtr&)>&& callback, const std::string& projectId, const std::string& commitId)
 		{
-			const auto project = ProjectNavigationService->getProjectById(boost::uuids::string_generator()(projectId));
+			const auto parsedProjectId = parseUuid(projectId);
+			if (!parsedProjectId)
+			{
+				callback(jsonError(drogon::k400BadRequest, "Invalid project id."));
+				return;
+			}
+
+			const auto project = ProjectNavigationService->getProjectById(*parsedProjectId);
 			if (project==nullptr)
             {
                 const auto response = drogon::HttpResponse::newHttpResponse(drogon::k404NotFound, drogon::CT_APPLICATION_JSON);
@@ -132,7 +185,14 @@ namespace StructuraSystems::Server
             }
 
 
-			auto _commitId = boost::uuids::string_generator()(commitId);
+			const auto parsedCommitId = parseUuid(commitId);
+			if (!parsedCommitId)
+			{
+				callback(jsonError(drogon::k400BadRequest, "Invalid commit id."));
+				return;
+			}
+
+			auto _commitId = *parsedCommitId;
 			const auto commit = ProjectVerService->getCommitById(project, _commitId);
 
 			if (commit) {
@@ -148,7 +208,14 @@ namespace StructuraSystems::Server
 
 		void getCommitChange(const drogon::HttpRequestPtr &request, std::function<void(const drogon::HttpResponsePtr&)>&& callback, const std::string& projectId, const std::string& commitId)
 		{
-			const auto project = ProjectNavigationService->getProjectById(boost::uuids::string_generator()(projectId));
+			const auto parsedProjectId = parseUuid(projectId);
+			if (!parsedProjectId)
+			{
+				callback(jsonError(drogon::k400BadRequest, "Invalid project id."));
+				return;
+			}
+
+			const auto project = ProjectNavigationService->getProjectById(*parsedProjectId);
 			if (project==nullptr)
             {
                 const auto response = drogon::HttpResponse::newHttpResponse(drogon::k404NotFound, drogon::CT_APPLICATION_JSON);
@@ -156,7 +223,14 @@ namespace StructuraSystems::Server
                 return;
             }
 
-			auto _commitId = boost::uuids::string_generator()(commitId);
+			const auto parsedCommitId = parseUuid(commitId);
+			if (!parsedCommitId)
+			{
+				callback(jsonError(drogon::k400BadRequest, "Invalid commit id."));
+				return;
+			}
+
+			auto _commitId = *parsedCommitId;
 			const auto commit = ProjectVerService->getCommitById(project, _commitId);
 			if (commit==nullptr)
             {
@@ -200,7 +274,14 @@ namespace StructuraSystems::Server
 
 		void getCommitChangeById(const drogon::HttpRequestPtr &, std::function<void(const drogon::HttpResponsePtr&)>&& callback, const std::string& projectId, const std::string& commitId,const std::string& changeId)
 		{
-			const auto project = ProjectNavigationService->getProjectById(boost::uuids::string_generator()(projectId));
+			const auto parsedProjectId = parseUuid(projectId);
+			if (!parsedProjectId)
+			{
+				callback(jsonError(drogon::k400BadRequest, "Invalid project id."));
+				return;
+			}
+
+			const auto project = ProjectNavigationService->getProjectById(*parsedProjectId);
 			if (project==nullptr)
             {
                 const auto response = drogon::HttpResponse::newHttpResponse(drogon::k404NotFound, drogon::CT_APPLICATION_JSON);
@@ -208,7 +289,14 @@ namespace StructuraSystems::Server
                 return;
             }
 
-			auto _commitId = boost::uuids::string_generator()(commitId);
+			const auto parsedCommitId = parseUuid(commitId);
+			if (!parsedCommitId)
+			{
+				callback(jsonError(drogon::k400BadRequest, "Invalid commit id."));
+				return;
+			}
+
+			auto _commitId = *parsedCommitId;
 			const auto commit = ProjectVerService->getCommitById(project, _commitId);
 			if (commit==nullptr)
             {
@@ -218,7 +306,14 @@ namespace StructuraSystems::Server
             }
 
 
-			auto _changeId = boost::uuids::string_generator()(changeId);
+			const auto parsedChangeId = parseUuid(changeId);
+			if (!parsedChangeId)
+			{
+				callback(jsonError(drogon::k400BadRequest, "Invalid change id."));
+				return;
+			}
+
+			auto _changeId = *parsedChangeId;
 			const auto commitChange = ProjectVerService->getCommitChangeById(project,commit,_changeId);
 			if (commitChange==nullptr)
             {
@@ -235,9 +330,33 @@ namespace StructuraSystems::Server
 
 		void postBranch(const drogon::HttpRequestPtr &request, std::function<void(const drogon::HttpResponsePtr&)>&& callback, const std::string& projectId)
 		{
-			const std::string json = request->getJsonObject()->toStyledString();
-			const auto branchReq = std::make_shared<SysMLv2::REST::BranchRequest>(json);
-			const auto& project = ProjectNavigationService->getProjectById(boost::uuids::string_generator()(projectId));
+			const auto jsonObject = requireJson(request);
+			if (jsonObject == nullptr)
+			{
+				callback(jsonError(drogon::k400BadRequest, "Missing or invalid JSON body."));
+				return;
+			}
+
+			std::shared_ptr<SysMLv2::REST::BranchRequest> branchReq;
+			std::string branchName;
+			std::shared_ptr<SysMLv2::REST::Commit> branchHead;
+			try {
+				branchReq = std::make_shared<SysMLv2::REST::BranchRequest>(jsonObject->toStyledString());
+				branchName = branchReq->getName();
+				branchHead = branchReq->getHead();
+			}
+			catch (...) {
+				callback(jsonError(drogon::k400BadRequest, "Invalid branch request."));
+				return;
+			}
+			const auto parsedProjectId = parseUuid(projectId);
+			if (!parsedProjectId)
+			{
+				callback(jsonError(drogon::k400BadRequest, "Invalid project id."));
+				return;
+			}
+
+			const auto project = ProjectNavigationService->getProjectById(*parsedProjectId);
 			if (project==nullptr)
             {
                 const auto response = drogon::HttpResponse::newHttpResponse(drogon::k404NotFound, drogon::CT_APPLICATION_JSON);
@@ -245,7 +364,7 @@ namespace StructuraSystems::Server
                 return;
             
 			}
-			const auto& branch = ProjectVerService->createBranch(project, branchReq->getName(),branchReq->getHead());
+			const auto& branch = ProjectVerService->createBranch(project, branchName, branchHead);
 
 			const auto response = drogon::HttpResponse::newHttpResponse(drogon::k200OK, drogon::CT_APPLICATION_JSON);
 			response->setBody(branch->serializeToJson());
@@ -254,7 +373,14 @@ namespace StructuraSystems::Server
 
 		void deleteBranch(const drogon::HttpRequestPtr &, std::function<void(const drogon::HttpResponsePtr&)>&& callback, const std::string& projectId, const std::string& branchId)
 		{
-			const auto& project = ProjectNavigationService->getProjectById(boost::uuids::string_generator()(projectId));
+			const auto parsedProjectId = parseUuid(projectId);
+			if (!parsedProjectId)
+			{
+				callback(jsonError(drogon::k400BadRequest, "Invalid project id."));
+				return;
+			}
+
+			const auto project = ProjectNavigationService->getProjectById(*parsedProjectId);
 			if (project==nullptr)
             {
                 const auto response = drogon::HttpResponse::newHttpResponse(drogon::k404NotFound, drogon::CT_APPLICATION_JSON);
@@ -262,8 +388,22 @@ namespace StructuraSystems::Server
                 return;
             }
 
-			auto branchID = boost::uuids::string_generator()(branchId);
-			const auto branch = ProjectVerService->deleteBranch(project,branchID);
+			const auto parsedBranchId = parseUuid(branchId);
+			if (!parsedBranchId)
+			{
+				callback(jsonError(drogon::k400BadRequest, "Invalid branch id."));
+				return;
+			}
+
+			auto branchID = *parsedBranchId;
+			std::shared_ptr<SysMLv2::REST::Branch> branch;
+			try {
+				branch = ProjectVerService->deleteBranch(project,branchID);
+			}
+			catch (const DefaultBranchDeletionException& exception) {
+				callback(jsonError(drogon::k409Conflict, exception.what()));
+				return;
+			}
 			if (branch==nullptr)
             {
                 const auto response = drogon::HttpResponse::newHttpResponse(drogon::k404NotFound, drogon::CT_APPLICATION_JSON);
@@ -278,7 +418,14 @@ namespace StructuraSystems::Server
 
 		void getBranches(const drogon::HttpRequestPtr &, std::function<void(const drogon::HttpResponsePtr&)>&& callback, const std::string& projectId)
 		{
-			const auto& project = ProjectNavigationService->getProjectById(boost::uuids::string_generator()(projectId));
+			const auto parsedProjectId = parseUuid(projectId);
+			if (!parsedProjectId)
+			{
+				callback(jsonError(drogon::k400BadRequest, "Invalid project id."));
+				return;
+			}
+
+			const auto project = ProjectNavigationService->getProjectById(*parsedProjectId);
 			if (project==nullptr)
             {
                 const auto response = drogon::HttpResponse::newHttpResponse(drogon::k404NotFound, drogon::CT_APPLICATION_JSON);
@@ -304,7 +451,14 @@ namespace StructuraSystems::Server
 
 		void getTags(const drogon::HttpRequestPtr &, std::function<void(const drogon::HttpResponsePtr&)>&& callback, const std::string& projectId)
 		{
-			const auto& project = ProjectNavigationService->getProjectById(boost::uuids::string_generator()(projectId));
+			const auto parsedProjectId = parseUuid(projectId);
+			if (!parsedProjectId)
+			{
+				callback(jsonError(drogon::k400BadRequest, "Invalid project id."));
+				return;
+			}
+
+			const auto project = ProjectNavigationService->getProjectById(*parsedProjectId);
 			if (project==nullptr)
             {
                 const auto response = drogon::HttpResponse::newHttpResponse(drogon::k404NotFound, drogon::CT_APPLICATION_JSON);
@@ -330,7 +484,14 @@ namespace StructuraSystems::Server
 
 		void getTagsById(const drogon::HttpRequestPtr &, std::function<void(const drogon::HttpResponsePtr&)>&& callback, const std::string& projectId, const std::string& tagId)
 		{
-			const auto& project = ProjectNavigationService->getProjectById(boost::uuids::string_generator()(projectId));
+			const auto parsedProjectId = parseUuid(projectId);
+			if (!parsedProjectId)
+			{
+				callback(jsonError(drogon::k400BadRequest, "Invalid project id."));
+				return;
+			}
+
+			const auto project = ProjectNavigationService->getProjectById(*parsedProjectId);
 			if (project==nullptr)
             {
                 const auto response = drogon::HttpResponse::newHttpResponse(drogon::k404NotFound, drogon::CT_APPLICATION_JSON);
@@ -338,7 +499,14 @@ namespace StructuraSystems::Server
                 return;
             }
 
-			auto tagID = boost::uuids::string_generator()(tagId);
+			const auto parsedTagId = parseUuid(tagId);
+			if (!parsedTagId)
+			{
+				callback(jsonError(drogon::k400BadRequest, "Invalid tag id."));
+				return;
+			}
+
+			auto tagID = *parsedTagId;
 			const auto& ptag = ProjectVerService->getTagById(project,tagID);
 			if (ptag==nullptr)
             {

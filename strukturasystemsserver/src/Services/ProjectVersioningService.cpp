@@ -10,6 +10,8 @@
 #include <sysmlv2/rest/entities/Data.h>
 #include <sysmlv2/rest/entities/Tag.h>
 
+#include <algorithm>
+
 #include "../Controller/CommitController.hpp"
 #include "../Entities/db/Project.hpp"
 
@@ -31,7 +33,10 @@ namespace StructuraSystems::Server
 	std::vector<std::shared_ptr<SysMLv2::REST::Commit>> ProjectVersioningService::getCommits(
 		std::shared_ptr<SysMLv2::REST::Project> project)
 	{
-		return ProjectIdCommitMap[project->getId()];
+		const auto it = ProjectIdCommitMap.find(project->getId());
+		if (it == ProjectIdCommitMap.end())
+			return {};
+		return it->second;
 	}
 
 	std::shared_ptr<SysMLv2::REST::Commit> ProjectVersioningService::getHeadCommit(
@@ -43,8 +48,11 @@ namespace StructuraSystems::Server
 	std::shared_ptr<SysMLv2::REST::Commit> ProjectVersioningService::getCommitById(
 		std::shared_ptr<SysMLv2::REST::Project> project, boost::uuids::uuid commitId)
 	{
-		const auto projectCommits = ProjectIdCommitMap[project->getId()];
-		for (const auto& commit:projectCommits)
+		const auto it = ProjectIdCommitMap.find(project->getId());
+		if (it == ProjectIdCommitMap.end())
+			return nullptr;
+
+		for (const auto& commit : it->second)
 		{
 			if (commit->getId() == commitId)
 				return commit;
@@ -178,15 +186,20 @@ namespace StructuraSystems::Server
 	std::vector<std::shared_ptr<SysMLv2::REST::Branch>> ProjectVersioningService::getBranches(
 		std::shared_ptr<SysMLv2::REST::Project> project)
 	{
-		return ProjectIdBranchMap.at(project->getId());
+		const auto it = ProjectIdBranchMap.find(project->getId());
+		if (it == ProjectIdBranchMap.end())
+			return {};
+		return it->second;
 	}
 
 	std::shared_ptr<SysMLv2::REST::Branch> ProjectVersioningService::getBranchById(std::shared_ptr<SysMLv2::REST::Project> project,
 			boost::uuids::uuid &branchId)
 	{
-		const auto branchesList = ProjectIdBranchMap.at(project->getId());
+		const auto it = ProjectIdBranchMap.find(project->getId());
+		if (it == ProjectIdBranchMap.end())
+			return nullptr;
 
-		for (const auto& branch : branchesList)
+		for (const auto& branch : it->second)
 			if (branch->getId() == branchId)
 				return branch;
 
@@ -196,7 +209,11 @@ namespace StructuraSystems::Server
 	std::shared_ptr<SysMLv2::REST::Branch> ProjectVersioningService::getDefaultBranch(
 		std::shared_ptr<SysMLv2::REST::Project> project)
 	{
-		for (const auto& branch: ProjectIdBranchMap[project->getId()])
+		const auto it = ProjectIdBranchMap.find(project->getId());
+		if (it == ProjectIdBranchMap.end() || project->getDefaultBranch() == nullptr)
+			return nullptr;
+
+		for (const auto& branch: it->second)
 			if (branch->getId()==project->getDefaultBranch()->getId())
 				return branch;
 		return nullptr;
@@ -224,35 +241,48 @@ namespace StructuraSystems::Server
 		const auto newBranch = std::make_shared<SysMLv2::REST::Branch>(branchName);
 		newBranch->setHead(head);
 		DBController->addBranch(project->getId(), newBranch);
-		ProjectIdBranchMap.at(project->getId()).push_back(newBranch);
+		ProjectIdBranchMap[project->getId()].push_back(newBranch);
 		return newBranch;
 	}
 
 	std::shared_ptr<SysMLv2::REST::Branch> ProjectVersioningService::deleteBranch(std::shared_ptr<SysMLv2::REST::Project> project,
 			boost::uuids::uuid &branchId)
 	{
-		auto& branchesList = ProjectIdBranchMap.at(project->getId());
-		std::shared_ptr<SysMLv2::REST::Branch> branch;
-		for (size_t i = 0; i< branchesList.size(); i++)
-		{
-			if (branchesList[i]->getId() == branchId)
-				branch = branchesList[i];
-		}
-		ProjectIdBranchMap.at(project->getId()).erase(std::remove(ProjectIdBranchMap.at(project->getId()).begin(), ProjectIdBranchMap.at(project->getId()).end(), branch));
+		const auto it = ProjectIdBranchMap.find(project->getId());
+		if (it == ProjectIdBranchMap.end())
+			return nullptr;
+
+		auto& branchesList = it->second;
+		const auto branchIt = std::find_if(branchesList.begin(), branchesList.end(),
+			[&branchId](const std::shared_ptr<SysMLv2::REST::Branch>& candidate) { return candidate->getId() == branchId; });
+		if (branchIt == branchesList.end())
+			return nullptr;
+
+		const auto branch = *branchIt;
+		if (project->getDefaultBranch() != nullptr && project->getDefaultBranch()->getId() == branchId)
+			throw DefaultBranchDeletionException();
+
+		branchesList.erase(branchIt);
 		DBController->deleteBranch(branch);
 		return branch;
 	}
 
 	std::vector<std::shared_ptr<SysMLv2::REST::Tag>> ProjectVersioningService::getTags(std::shared_ptr<SysMLv2::REST::Project> project)
 	{
-		return ProjectIdTagMap.at(project->getId());
+		const auto it = ProjectIdTagMap.find(project->getId());
+		if (it == ProjectIdTagMap.end())
+			return {};
+		return it->second;
 	}
 
 	std::shared_ptr<SysMLv2::REST::Tag> ProjectVersioningService::getTagById(std::shared_ptr<SysMLv2::REST::Project> project,
 			boost::uuids::uuid &tagId)
 	{
-		auto& tagList = ProjectIdTagMap.at(project->getId());
-		for (const auto& tag : tagList)
+		const auto it = ProjectIdTagMap.find(project->getId());
+		if (it == ProjectIdTagMap.end())
+			return nullptr;
+
+		for (const auto& tag : it->second)
 		{
 			if (tag->getId() == tagId)
 				return tag;
@@ -305,5 +335,6 @@ namespace StructuraSystems::Server
 
 		ProjectIdBranchMap = DBController->getAllBranches();
 		ProjectIdCommitMap = DBController->getAllCommits();
+		ProjectIdTagMap = DBController->getAllTags();
 	}
 }

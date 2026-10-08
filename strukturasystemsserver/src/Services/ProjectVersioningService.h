@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include <map>
+#include <stdexcept>
 #include <boost/uuid.hpp>
 #include <sysmlv2/service/interfaces/IProjectVersioningService.h>
 #include <sysmlv2/rest/entities/ChangeType.h>
@@ -8,6 +9,13 @@
 
 namespace StructuraSystems::Server
 {
+	/// Thrown when the default branch of a project should be deleted.
+	class DefaultBranchDeletionException : public std::runtime_error
+	{
+	public:
+		DefaultBranchDeletionException() : std::runtime_error("The default branch of a project cannot be deleted.") {}
+	};
+
 	class ProjectVersioningService : public SysMLv2::API::IProjectVersioningService
 	{
 	public:
