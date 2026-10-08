@@ -16,6 +16,7 @@
 #include "../Services/ServerProjectService.h"
 #include "../Filter/JwtFilter.hpp"
 #include "Helper/RequestHelper.hpp"
+#include "Helper/ProjectAccessHelper.hpp"
 
 namespace StructuraSystems::Server
 {
@@ -36,22 +37,11 @@ namespace StructuraSystems::Server
 		ADD_METHOD_TO(CommitController::getTagsById,"/projects/{1:projectId}/tags/{2:tagId}",drogon::Get, "StructuraSystems::Server::JwtFilter");
 		METHOD_LIST_END
 
-		void getCommits(const drogon::HttpRequestPtr &, std::function<void(const drogon::HttpResponsePtr&)>&& callback, std::string projectId)
+		void getCommits(const drogon::HttpRequestPtr &request, std::function<void(const drogon::HttpResponsePtr&)>&& callback, std::string projectId)
 		{
-			const auto parsedProjectId = parseUuid(projectId);
-			if (!parsedProjectId)
-			{
-				callback(jsonError(drogon::k400BadRequest, "Invalid project id."));
+			const auto project = withProject(request, projectId, ProjectAccess::Read, callback);
+			if (!project)
 				return;
-			}
-
-			const auto project = ProjectNavigationService->getProjectById(*parsedProjectId);
-			if (project==nullptr)
-            {
-                const auto response = drogon::HttpResponse::newHttpResponse(drogon::k404NotFound, drogon::CT_APPLICATION_JSON);
-                callback(response);
-                return;
-            }
 
 			const auto& commits = ProjectVerService->getCommits(project);
 			std::string returnValue = "[\r\n";
@@ -69,6 +59,10 @@ namespace StructuraSystems::Server
 
 		void postCommit(const drogon::HttpRequestPtr &request, std::function<void(const drogon::HttpResponsePtr&)>&& callback, const std::string& projectId)
 		{
+			const auto project = withProject(request, projectId, ProjectAccess::Write, callback);
+			if (!project)
+				return;
+
 			const auto jsonObject = requireJson(request);
 			if (jsonObject == nullptr)
 			{
@@ -88,21 +82,6 @@ namespace StructuraSystems::Server
 				callback(jsonError(drogon::k400BadRequest, "Invalid commit request."));
 				return;
 			}
-			const auto parsedProjectId = parseUuid(projectId);
-			if (!parsedProjectId)
-			{
-				callback(jsonError(drogon::k400BadRequest, "Invalid project id."));
-				return;
-			}
-
-			const auto project = ProjectNavigationService->getProjectById(*parsedProjectId);
-			
-			if (project==nullptr)
-            {
-                const auto response = drogon::HttpResponse::newHttpResponse(drogon::k404NotFound, drogon::CT_APPLICATION_JSON);
-                callback(response);
-                return;
-            }
 
 			auto branch = ProjectVerService->getDefaultBranch(project);
 
@@ -127,23 +106,11 @@ namespace StructuraSystems::Server
 			callback(response);
 		}
 
-		void getBranchWithId(const drogon::HttpRequestPtr &, std::function<void(const drogon::HttpResponsePtr&)>&& callback, const std::string& projectId, const std::string& branchId)
+		void getBranchWithId(const drogon::HttpRequestPtr &request, std::function<void(const drogon::HttpResponsePtr&)>&& callback, const std::string& projectId, const std::string& branchId)
 		{
-			const auto parsedProjectId = parseUuid(projectId);
-			if (!parsedProjectId)
-			{
-				callback(jsonError(drogon::k400BadRequest, "Invalid project id."));
+			const auto project = withProject(request, projectId, ProjectAccess::Read, callback);
+			if (!project)
 				return;
-			}
-
-			const auto project = ProjectNavigationService->getProjectById(*parsedProjectId);
-			
-			if (project==nullptr)
-            {
-                const auto response = drogon::HttpResponse::newHttpResponse(drogon::k404NotFound, drogon::CT_APPLICATION_JSON);
-                callback(response);
-                return;
-            }
 
 			const auto parsedBranchId = parseUuid(branchId);
 			if (!parsedBranchId)
@@ -167,22 +134,11 @@ namespace StructuraSystems::Server
 			callback(response);
 		}
 
-		void getCommitId(const drogon::HttpRequestPtr &, std::function<void(const drogon::HttpResponsePtr&)>&& callback, const std::string& projectId, const std::string& commitId)
+		void getCommitId(const drogon::HttpRequestPtr &request, std::function<void(const drogon::HttpResponsePtr&)>&& callback, const std::string& projectId, const std::string& commitId)
 		{
-			const auto parsedProjectId = parseUuid(projectId);
-			if (!parsedProjectId)
-			{
-				callback(jsonError(drogon::k400BadRequest, "Invalid project id."));
+			const auto project = withProject(request, projectId, ProjectAccess::Read, callback);
+			if (!project)
 				return;
-			}
-
-			const auto project = ProjectNavigationService->getProjectById(*parsedProjectId);
-			if (project==nullptr)
-            {
-                const auto response = drogon::HttpResponse::newHttpResponse(drogon::k404NotFound, drogon::CT_APPLICATION_JSON);
-                callback(response);
-                return;
-            }
 
 
 			const auto parsedCommitId = parseUuid(commitId);
@@ -208,20 +164,9 @@ namespace StructuraSystems::Server
 
 		void getCommitChange(const drogon::HttpRequestPtr &request, std::function<void(const drogon::HttpResponsePtr&)>&& callback, const std::string& projectId, const std::string& commitId)
 		{
-			const auto parsedProjectId = parseUuid(projectId);
-			if (!parsedProjectId)
-			{
-				callback(jsonError(drogon::k400BadRequest, "Invalid project id."));
+			const auto project = withProject(request, projectId, ProjectAccess::Read, callback);
+			if (!project)
 				return;
-			}
-
-			const auto project = ProjectNavigationService->getProjectById(*parsedProjectId);
-			if (project==nullptr)
-            {
-                const auto response = drogon::HttpResponse::newHttpResponse(drogon::k404NotFound, drogon::CT_APPLICATION_JSON);
-                callback(response);
-                return;
-            }
 
 			const auto parsedCommitId = parseUuid(commitId);
 			if (!parsedCommitId)
@@ -272,22 +217,11 @@ namespace StructuraSystems::Server
 			callback(response);
 		}
 
-		void getCommitChangeById(const drogon::HttpRequestPtr &, std::function<void(const drogon::HttpResponsePtr&)>&& callback, const std::string& projectId, const std::string& commitId,const std::string& changeId)
+		void getCommitChangeById(const drogon::HttpRequestPtr &request, std::function<void(const drogon::HttpResponsePtr&)>&& callback, const std::string& projectId, const std::string& commitId,const std::string& changeId)
 		{
-			const auto parsedProjectId = parseUuid(projectId);
-			if (!parsedProjectId)
-			{
-				callback(jsonError(drogon::k400BadRequest, "Invalid project id."));
+			const auto project = withProject(request, projectId, ProjectAccess::Read, callback);
+			if (!project)
 				return;
-			}
-
-			const auto project = ProjectNavigationService->getProjectById(*parsedProjectId);
-			if (project==nullptr)
-            {
-                const auto response = drogon::HttpResponse::newHttpResponse(drogon::k404NotFound, drogon::CT_APPLICATION_JSON);
-                callback(response);
-                return;
-            }
 
 			const auto parsedCommitId = parseUuid(commitId);
 			if (!parsedCommitId)
@@ -330,6 +264,10 @@ namespace StructuraSystems::Server
 
 		void postBranch(const drogon::HttpRequestPtr &request, std::function<void(const drogon::HttpResponsePtr&)>&& callback, const std::string& projectId)
 		{
+			const auto project = withProject(request, projectId, ProjectAccess::Write, callback);
+			if (!project)
+				return;
+
 			const auto jsonObject = requireJson(request);
 			if (jsonObject == nullptr)
 			{
@@ -349,21 +287,6 @@ namespace StructuraSystems::Server
 				callback(jsonError(drogon::k400BadRequest, "Invalid branch request."));
 				return;
 			}
-			const auto parsedProjectId = parseUuid(projectId);
-			if (!parsedProjectId)
-			{
-				callback(jsonError(drogon::k400BadRequest, "Invalid project id."));
-				return;
-			}
-
-			const auto project = ProjectNavigationService->getProjectById(*parsedProjectId);
-			if (project==nullptr)
-            {
-                const auto response = drogon::HttpResponse::newHttpResponse(drogon::k404NotFound, drogon::CT_APPLICATION_JSON);
-                callback(response);
-                return;
-            
-			}
 			const auto& branch = ProjectVerService->createBranch(project, branchName, branchHead);
 
 			const auto response = drogon::HttpResponse::newHttpResponse(drogon::k200OK, drogon::CT_APPLICATION_JSON);
@@ -371,22 +294,11 @@ namespace StructuraSystems::Server
 			callback(response);
 		}
 
-		void deleteBranch(const drogon::HttpRequestPtr &, std::function<void(const drogon::HttpResponsePtr&)>&& callback, const std::string& projectId, const std::string& branchId)
+		void deleteBranch(const drogon::HttpRequestPtr &request, std::function<void(const drogon::HttpResponsePtr&)>&& callback, const std::string& projectId, const std::string& branchId)
 		{
-			const auto parsedProjectId = parseUuid(projectId);
-			if (!parsedProjectId)
-			{
-				callback(jsonError(drogon::k400BadRequest, "Invalid project id."));
+			const auto project = withProject(request, projectId, ProjectAccess::Write, callback);
+			if (!project)
 				return;
-			}
-
-			const auto project = ProjectNavigationService->getProjectById(*parsedProjectId);
-			if (project==nullptr)
-            {
-                const auto response = drogon::HttpResponse::newHttpResponse(drogon::k404NotFound, drogon::CT_APPLICATION_JSON);
-                callback(response);
-                return;
-            }
 
 			const auto parsedBranchId = parseUuid(branchId);
 			if (!parsedBranchId)
@@ -416,22 +328,11 @@ namespace StructuraSystems::Server
 			callback(response);
 		}
 
-		void getBranches(const drogon::HttpRequestPtr &, std::function<void(const drogon::HttpResponsePtr&)>&& callback, const std::string& projectId)
+		void getBranches(const drogon::HttpRequestPtr &request, std::function<void(const drogon::HttpResponsePtr&)>&& callback, const std::string& projectId)
 		{
-			const auto parsedProjectId = parseUuid(projectId);
-			if (!parsedProjectId)
-			{
-				callback(jsonError(drogon::k400BadRequest, "Invalid project id."));
+			const auto project = withProject(request, projectId, ProjectAccess::Read, callback);
+			if (!project)
 				return;
-			}
-
-			const auto project = ProjectNavigationService->getProjectById(*parsedProjectId);
-			if (project==nullptr)
-            {
-                const auto response = drogon::HttpResponse::newHttpResponse(drogon::k404NotFound, drogon::CT_APPLICATION_JSON);
-                callback(response);
-                return;
-            }
 
 			const auto branches = ProjectVerService->getBranches(project);
 
@@ -449,22 +350,11 @@ namespace StructuraSystems::Server
 			callback(response);
 		}
 
-		void getTags(const drogon::HttpRequestPtr &, std::function<void(const drogon::HttpResponsePtr&)>&& callback, const std::string& projectId)
+		void getTags(const drogon::HttpRequestPtr &request, std::function<void(const drogon::HttpResponsePtr&)>&& callback, const std::string& projectId)
 		{
-			const auto parsedProjectId = parseUuid(projectId);
-			if (!parsedProjectId)
-			{
-				callback(jsonError(drogon::k400BadRequest, "Invalid project id."));
+			const auto project = withProject(request, projectId, ProjectAccess::Read, callback);
+			if (!project)
 				return;
-			}
-
-			const auto project = ProjectNavigationService->getProjectById(*parsedProjectId);
-			if (project==nullptr)
-            {
-                const auto response = drogon::HttpResponse::newHttpResponse(drogon::k404NotFound, drogon::CT_APPLICATION_JSON);
-                callback(response);
-                return;
-            }
 
 			auto tags = ProjectVerService->getTags(project);
 
@@ -482,22 +372,11 @@ namespace StructuraSystems::Server
 			callback(response);
 		}
 
-		void getTagsById(const drogon::HttpRequestPtr &, std::function<void(const drogon::HttpResponsePtr&)>&& callback, const std::string& projectId, const std::string& tagId)
+		void getTagsById(const drogon::HttpRequestPtr &request, std::function<void(const drogon::HttpResponsePtr&)>&& callback, const std::string& projectId, const std::string& tagId)
 		{
-			const auto parsedProjectId = parseUuid(projectId);
-			if (!parsedProjectId)
-			{
-				callback(jsonError(drogon::k400BadRequest, "Invalid project id."));
+			const auto project = withProject(request, projectId, ProjectAccess::Read, callback);
+			if (!project)
 				return;
-			}
-
-			const auto project = ProjectNavigationService->getProjectById(*parsedProjectId);
-			if (project==nullptr)
-            {
-                const auto response = drogon::HttpResponse::newHttpResponse(drogon::k404NotFound, drogon::CT_APPLICATION_JSON);
-                callback(response);
-                return;
-            }
 
 			const auto parsedTagId = parseUuid(tagId);
 			if (!parsedTagId)

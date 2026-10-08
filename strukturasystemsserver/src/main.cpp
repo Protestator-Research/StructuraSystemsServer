@@ -5,6 +5,7 @@
 
 
 #include "Controller/AuthenticationController.hpp"
+#include "Controller/GroupController.hpp"
 #include "Controller/ProjectController.hpp"
 #include "Controller/CommitController.hpp"
 #include "Controller/DataBaseController.h"
@@ -12,7 +13,6 @@
 #include "Controller/DigitalTwinController.hpp"
 #include "Services/AuthenticationService.h"
 #include "Filter/JwtFilter.hpp"
-#include "Filter/AdministrationFilter.hpp"
 #include "Filter/CorsFilter.hpp"
 
 #include <drogon/drogon.h>
@@ -91,7 +91,6 @@ int main() {
         return 1;
     }
     [[maybe_unused]] auto jwtFilter = StructuraSystems::Server::JwtFilter();
-    [[maybe_unused]] auto adminFilter = StructuraSystems::Server::AdministrationFilter();
 
     const auto& allowed_origin = customConfig["allowed_origin"].asString();
 

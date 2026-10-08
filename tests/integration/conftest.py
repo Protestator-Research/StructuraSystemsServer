@@ -17,7 +17,6 @@ CONAN_RUN_ENV = REPO_ROOT / "build" / "Debug" / "generators" / "conanrun.sh"
 TEST_DB = "structura_systems_test"
 TEST_PORT = 18088
 ADMIN_PASSWORD = "TestAdmin123!"
-LEGACY_ADMIN_PASSWORD = "admin"
 USER_PASSWORD = "Password1234!"
 MONGO_URI = os.environ.get(
     "TEST_MONGO_URI",
@@ -107,6 +106,8 @@ def start_server(db_name, port, extra_env=None, drop_db=True, expect_ready=True)
     for name in ("MONGO_ADDRESS", "MONGO_USERNAME", "MONGO_PASSWORD", "MONGO_DATABASE"):
         env.pop(name, None)
     env.update(extra_env or {})
+    # A value of None removes the variable from the environment.
+    env = {key: value for key, value in env.items() if value is not None}
 
     def dump_output():
         print("---- server output ----")
@@ -153,10 +154,7 @@ def mongo():
 
 @pytest.fixture(scope="session")
 def admin_token(server, base_url):
-    try:
-        return login(base_url, "admin", ADMIN_PASSWORD)
-    except requests.exceptions.HTTPError:
-        return login(base_url, "admin", LEGACY_ADMIN_PASSWORD)
+    return login(base_url, "admin", ADMIN_PASSWORD)
 
 
 @pytest.fixture
@@ -176,5 +174,15 @@ def make_user(base_url, admin_token):
         )
         assert response.status_code == 201, response.text
         return username, USER_PASSWORD
+
+    return _make
+
+
+@pytest.fixture
+def make_login(base_url, make_user):
+    """Creates a user and returns (username, token)."""
+    def _make(role=0, group=""):
+        username, password = make_user(role=role, group=group)
+        return username, login(base_url, username, password)
 
     return _make

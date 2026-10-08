@@ -9,6 +9,8 @@
 #include "../Entities/db/Project.hpp"
 #include "../Filter/JwtFilter.hpp"
 #include "Helper/RequestHelper.hpp"
+#include "Helper/ProjectAccessHelper.hpp"
+#include "DataBaseController.h"
 
 namespace StructuraSystems::Server
 {
@@ -22,11 +24,16 @@ namespace StructuraSystems::Server
 		ADD_METHOD_TO(ProjectController::getProjectWithId,"/projects/{1:projectId}",drogon::Get, "StructuraSystems::Server::JwtFilter");
 		ADD_METHOD_TO(ProjectController::deleteProjectWithId,"/projects/{1:projectId}",drogon::Delete, "StructuraSystems::Server::JwtFilter");
 		ADD_METHOD_TO(ProjectController::createProject,"/projects",drogon::Post, "StructuraSystems::Server::JwtFilter");
+		ADD_METHOD_TO(ProjectController::changeOwner,"/projects/{1:projectId}/owner",drogon::Put, "StructuraSystems::Server::JwtFilter");
 		METHOD_LIST_END
 
 		void getProjects(const drogon::HttpRequestPtr &req, std::function<void(const drogon::HttpResponsePtr&)>&& callback) const {
-			const auto authHeader = req->getHeader("Authorization");
-			const auto& user = AuthenticationService::getInstance()->getUserFromDatabase(authHeader.substr(7));
+			const auto user = currentUser(req);
+			if (!user)
+			{
+				callback(jsonError(drogon::k401Unauthorized, "Not authenticated."));
+				return;
+			}
 
 			const auto& projects = _ProjectService->getProjects();
 
@@ -35,7 +42,7 @@ namespace StructuraSystems::Server
 			{
 				const auto db_project = std::dynamic_pointer_cast<StructuraSystems::Server::Project>(project);
 
-				if (isUsersAccessAllowed(user, db_project))
+				if (canAccessProject(*user, db_project, ProjectAccess::Read))
 					userAllowedProjects.push_back(project);
 			}
 
@@ -54,76 +61,40 @@ namespace StructuraSystems::Server
 		}
 
 		void getProjectWithId(const drogon::HttpRequestPtr &req, std::function<void(const drogon::HttpResponsePtr&)>&& callback, const std::string& projectId) const {
+			const auto project = withProject(req, projectId, ProjectAccess::Read, callback);
+			if (!project)
+				return;
+
 			const auto response = drogon::HttpResponse::newHttpResponse(drogon::k200OK, drogon::CT_APPLICATION_JSON);
-
-			const auto authHeader = req->getHeader("Authorization");
-			const auto& user = AuthenticationService::getInstance()->getUserFromDatabase(authHeader.substr(7));
-
-			const auto parsedProjectId = parseUuid(projectId);
-			if (!parsedProjectId)
-			{
-				callback(jsonError(drogon::k400BadRequest, "Invalid project id."));
-				return;
-			}
-
-			const auto project = _ProjectService->getProjectById(*parsedProjectId);
-			if (project==nullptr)
-            {
-                const auto notFoundResponse = drogon::HttpResponse::newHttpResponse(drogon::k404NotFound, drogon::CT_APPLICATION_JSON);
-                callback(notFoundResponse);
-                return;
-            }
-			if (!isUsersAccessAllowed(user,std::dynamic_pointer_cast<Project>(project)))
-			{
-				const auto error_response = drogon::HttpResponse::newHttpResponse(drogon::k401Unauthorized, drogon::CT_APPLICATION_JSON);
-				callback(error_response);
-				return;
-			}
-
 			response->setBody(project->serializeToJson());
 			callback(response);
 		}
 
 		void deleteProjectWithId(const drogon::HttpRequestPtr &req, std::function<void(const drogon::HttpResponsePtr&)>&& callback, const std::string& projectId) const {
-			const auto response = drogon::HttpResponse::newHttpResponse(drogon::k200OK, drogon::CT_APPLICATION_JSON);
-
-			const auto authHeader = req->getHeader("Authorization");
-			const auto& user = AuthenticationService::getInstance()->getUserFromDatabase(authHeader.substr(7));
-
-			const auto parsedProjectId = parseUuid(projectId);
-			if (!parsedProjectId)
-			{
-				callback(jsonError(drogon::k400BadRequest, "Invalid project id."));
+			const auto existingProject = withProject(req, projectId, ProjectAccess::Delete, callback);
+			if (!existingProject)
 				return;
-			}
 
-			const auto existingProject = _ProjectService->getProjectById(*parsedProjectId);
-			if (existingProject==nullptr)
-            {
-                const auto error_response = drogon::HttpResponse::newHttpResponse(drogon::k404NotFound, drogon::CT_APPLICATION_JSON);
-                callback(error_response);
-                return;
-            }
-			if (!isUsersAccessAllowed(user,std::dynamic_pointer_cast<Project>(existingProject)))
-			{
-				const auto error_response = drogon::HttpResponse::newHttpResponse(drogon::k401Unauthorized, drogon::CT_APPLICATION_JSON);
-				callback(error_response);
-				return;
-			}
-
-			const auto project = _ProjectService->deleteProject(*parsedProjectId);
+			const auto project = _ProjectService->deleteProject(existingProject->getId());
 			if (project==nullptr)
-            {
-                const auto error_response = drogon::HttpResponse::newHttpResponse(drogon::k404NotFound, drogon::CT_APPLICATION_JSON);
-                callback(error_response);
-                return;
-            }
+			{
+				callback(jsonError(drogon::k404NotFound, "Project not found."));
+				return;
+			}
 
+			const auto response = drogon::HttpResponse::newHttpResponse(drogon::k200OK, drogon::CT_APPLICATION_JSON);
 			response->setBody(project->serializeToJson());
 			callback(response);
 		}
 
 		void createProject(const drogon::HttpRequestPtr &request, std::function<void(const drogon::HttpResponsePtr&)>&& callback) const {
+			const auto user = currentUser(request);
+			if (!user)
+			{
+				callback(jsonError(drogon::k401Unauthorized, "Not authenticated."));
+				return;
+			}
+
 			const auto jsonObject = requireJson(request);
 			if (jsonObject == nullptr || !jsonObject->isObject())
 			{
@@ -132,17 +103,33 @@ namespace StructuraSystems::Server
 			}
 			const auto& requestObject = *jsonObject;
 
-			const auto owner = request->getParameter("owner");
-			const auto group = request->getParameter("owningGroup");
+			// The owner is always the authenticated user; a client supplied owner is ignored.
+			const auto owner = user->username();
+			std::string group = request->getParameter("owningGroup");
 
 			std::string name;
 			std::string description;
 			try {
 				name = requestObject["name"].asString();
 				description = requestObject["description"].asString();
+				if (requestObject.isMember("owningGroup"))
+				{
+					if (!requestObject["owningGroup"].isString())
+					{
+						callback(jsonError(drogon::k400BadRequest, "owningGroup must be a string."));
+						return;
+					}
+					group = requestObject["owningGroup"].asString();
+				}
 			}
 			catch (const Json::Exception&) {
 				callback(jsonError(drogon::k400BadRequest, "Invalid project description."));
+				return;
+			}
+
+			if (!mayUseGroup(*user, group))
+			{
+				callback(jsonError(drogon::k403Forbidden, "You are not a member of the owning group."));
 				return;
 			}
 
@@ -152,15 +139,67 @@ namespace StructuraSystems::Server
 			callback(response);
 		}
 
+		void changeOwner(const drogon::HttpRequestPtr &request, std::function<void(const drogon::HttpResponsePtr&)>&& callback, const std::string& projectId) const {
+			User user;
+			const auto project = withProject(request, projectId, ProjectAccess::Delete, callback, &user);
+			if (!project)
+				return;
+
+			const auto jsonObject = requireJson(request);
+			if (jsonObject == nullptr || !jsonObject->isObject())
+			{
+				callback(jsonError(drogon::k400BadRequest, "Missing or invalid JSON body."));
+				return;
+			}
+			const auto& requestObject = *jsonObject;
+
+			const bool hasOwner = requestObject.isMember("owner");
+			const bool hasGroup = requestObject.isMember("owningGroup");
+			if ((!hasOwner && !hasGroup) ||
+				(hasOwner && !requestObject["owner"].isString()) ||
+				(hasGroup && !requestObject["owningGroup"].isString()))
+			{
+				callback(jsonError(drogon::k400BadRequest, "Expected string fields owner and/or owningGroup."));
+				return;
+			}
+
+			std::string newOwner = project->getOwner();
+			std::string newGroup = project->getOwningGroup();
+			if (hasOwner)
+			{
+				newOwner = requestObject["owner"].asString();
+				if (!AuthenticationService::getInstance()->findUser(newOwner))
+				{
+					callback(jsonError(drogon::k400BadRequest, "The new owner does not exist."));
+					return;
+				}
+			}
+			if (hasGroup)
+			{
+				newGroup = requestObject["owningGroup"].asString();
+				if (!mayUseGroup(user, newGroup))
+				{
+					callback(jsonError(drogon::k403Forbidden, "You are not a member of the owning group."));
+					return;
+				}
+			}
+
+			project->setOwner(newOwner);
+			project->setOwningGroup(newGroup);
+			DataBaseController::getInstance()->updateProject(project);
+
+			const auto response = drogon::HttpResponse::newHttpResponse(drogon::k200OK, drogon::CT_APPLICATION_JSON);
+			response->setBody(project->serializeToJson());
+			callback(response);
+		}
+
 	private:
 		std::shared_ptr<ServerProjectService> _ProjectService = ServerProjectService::getInstance();
 
-		bool isUsersAccessAllowed(const User& user, std::shared_ptr<Project> project) const
+		/// An owning group may only be set by its members and by administrators.
+		static bool mayUseGroup(const User& user, const std::string& group)
 		{
-			return (((project->getOwner().empty()) && project->getOwningGroup().empty()) ||
-				(user.username() == project->getOwner()) ||
-				(user.group()==project->getOwningGroup()));
+			return group.empty() || user.role() == USER_ROLE::GLOBAL_ADMINISTRATOR || user.group() == group;
 		}
-
 	};
 }

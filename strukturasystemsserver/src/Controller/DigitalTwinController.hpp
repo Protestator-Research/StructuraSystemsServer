@@ -16,6 +16,7 @@
 #include "../Services/DigitalTwinService.h"
 #include "../Filter/JwtFilter.hpp"
 #include "Helper/RequestHelper.hpp"
+#include "Helper/ProjectAccessHelper.hpp"
 
 namespace StructuraSystems::Server {
     class DigitalTwinController : public drogon::HttpController<StructuraSystems::Server::DigitalTwinController> {
@@ -26,22 +27,10 @@ namespace StructuraSystems::Server {
         ADD_METHOD_TO(DigitalTwinController::getTwinData, "/project/{1:projectId}/twins/{2:tagId}/data", drogon::Get, "StructuraSystems::Server::JwtFilter");
         METHOD_LIST_END
 
-        void getAllTwins(const drogon::HttpRequestPtr &, std::function<void(const drogon::HttpResponsePtr&)>&& callback, const std::string& projectId) {
-            const auto parsedProjectId = parseUuid(projectId);
-            if (!parsedProjectId)
-            {
-                callback(jsonError(drogon::k400BadRequest, "Invalid project id."));
+        void getAllTwins(const drogon::HttpRequestPtr &request, std::function<void(const drogon::HttpResponsePtr&)>&& callback, const std::string& projectId) {
+            const auto project = withProject(request, projectId, ProjectAccess::Read, callback);
+            if (!project)
                 return;
-            }
-
-            const auto project = ProjectNavigationService->getProjectById(*parsedProjectId);
-
-            if (project==nullptr)
-            {
-                const auto response = drogon::HttpResponse::newHttpResponse(drogon::k404NotFound, drogon::CT_APPLICATION_JSON);
-                callback(response);
-                return;
-            }
 
             const auto twins = DTService->getAllTwinsForProject(project);
 
@@ -60,6 +49,10 @@ namespace StructuraSystems::Server {
         }
 
         void postTwin(const drogon::HttpRequestPtr & request, std::function<void(const drogon::HttpResponsePtr&)>&& callback, const std::string& projectId) {
+            const auto project = withProject(request, projectId, ProjectAccess::Write, callback);
+            if (!project)
+                return;
+
             const auto jsonObject = requireJson(request);
             if (jsonObject == nullptr)
             {
@@ -83,20 +76,6 @@ namespace StructuraSystems::Server {
                 return;
             }
 
-            const auto parsedProjectId = parseUuid(projectId);
-            if (!parsedProjectId)
-            {
-                callback(jsonError(drogon::k400BadRequest, "Invalid project id."));
-                return;
-            }
-
-            const auto project = ProjectNavigationService->getProjectById(*parsedProjectId);
-            if (project == nullptr)
-            {
-                callback(drogon::HttpResponse::newHttpResponse(drogon::k404NotFound, drogon::CT_APPLICATION_JSON));
-                return;
-            }
-
             const auto commit = ProjectVerService->getCommitById(project,referencedCommit->getId());
             if (commit == nullptr)
             {
@@ -111,7 +90,11 @@ namespace StructuraSystems::Server {
             callback(response);
         }
 
-        void getTwinData([[maybe_unused]] const drogon::HttpRequestPtr & request, std::function<void(const drogon::HttpResponsePtr&)>&& callback, [[maybe_unused]] const std::string& projectId, [[maybe_unused]] const std::string& tagId) {
+        void getTwinData(const drogon::HttpRequestPtr & request, std::function<void(const drogon::HttpResponsePtr&)>&& callback, const std::string& projectId, [[maybe_unused]] const std::string& tagId) {
+            const auto project = withProject(request, projectId, ProjectAccess::Read, callback);
+            if (!project)
+                return;
+
             const auto response = drogon::HttpResponse::newHttpResponse(drogon::k501NotImplemented, drogon::CT_APPLICATION_JSON);
             callback(response);
         }

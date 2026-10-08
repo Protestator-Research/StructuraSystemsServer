@@ -86,7 +86,17 @@ namespace StructuraSystems::Server
 		replace(jsonString, "@id", "_id");
 		nlohmann::json json = nlohmann::json::parse(jsonString);
 		auto query_filter = bsoncxx::builder::basic::make_document(bsoncxx::builder::basic::kvp("_id", boost::uuids::to_string(project->getId())));
-		auto update_project = bsoncxx::builder::basic::make_document(bsoncxx::builder::basic::kvp("$set",bsoncxx::from_json(json.dump())));
+		// getDataBaseString omits empty owner/owningGroup; $set alone would keep stale values, so unset them.
+		nlohmann::json unset = nlohmann::json::object();
+		if (!json.contains("owner"))
+			unset["owner"] = "";
+		if (!json.contains("owningGroup"))
+			unset["owningGroup"] = "";
+		bsoncxx::builder::basic::document update_builder;
+		update_builder.append(bsoncxx::builder::basic::kvp("$set", bsoncxx::from_json(json.dump())));
+		if (!unset.empty())
+			update_builder.append(bsoncxx::builder::basic::kvp("$unset", bsoncxx::from_json(unset.dump())));
+		auto update_project = update_builder.extract();
 
 		auto result = database["projects"].update_one(query_filter.view(), update_project.view());
 	}

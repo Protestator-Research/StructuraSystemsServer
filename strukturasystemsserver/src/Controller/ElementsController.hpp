@@ -12,6 +12,7 @@
 #include "../Services/ElementNavigationService.h"
 #include "../Filter/JwtFilter.hpp"
 #include "Helper/RequestHelper.hpp"
+#include "Helper/ProjectAccessHelper.hpp"
 
 
 namespace StructuraSystems::Server
@@ -27,14 +28,11 @@ namespace StructuraSystems::Server
 		METHOD_LIST_END
 
 
-		void getElements(const drogon::HttpRequestPtr &, std::function<void(const drogon::HttpResponsePtr&)>&& callback, const std::string& projectId, const std::string& commitId)
+		void getElements(const drogon::HttpRequestPtr &request, std::function<void(const drogon::HttpResponsePtr&)>&& callback, const std::string& projectId, const std::string& commitId)
 		{
-			const auto parsedProjectId = parseUuid(projectId);
-			if (!parsedProjectId)
-			{
-				callback(jsonError(drogon::k400BadRequest, "Invalid project id."));
+			const auto project = withProject(request, projectId, ProjectAccess::Read, callback);
+			if (!project)
 				return;
-			}
 
 			const auto parsedCommitId = parseUuid(commitId);
 			if (!parsedCommitId)
@@ -42,14 +40,6 @@ namespace StructuraSystems::Server
 				callback(jsonError(drogon::k400BadRequest, "Invalid commit id."));
 				return;
 			}
-
-			const auto project = ProjectService->getProjectById(*parsedProjectId);
-			if (project==nullptr)
-            {
-                const auto response = drogon::HttpResponse::newHttpResponse(drogon::k404NotFound, drogon::CT_APPLICATION_JSON);
-                callback(response);
-                return;
-            }
 
 			const auto commit = ProjectVerService->getCommitById(project, *parsedCommitId);
 			if (commit==nullptr)
@@ -75,14 +65,11 @@ namespace StructuraSystems::Server
 			callback(response);
 		}
 
-		void getElementWithId(const drogon::HttpRequestPtr &, std::function<void(const drogon::HttpResponsePtr&)>&& callback, std::string projectId, std::string commitId, std::string elementId)
+		void getElementWithId(const drogon::HttpRequestPtr &request, std::function<void(const drogon::HttpResponsePtr&)>&& callback, std::string projectId, std::string commitId, std::string elementId)
 		{
-			const auto parsedProjectId = parseUuid(projectId);
-			if (!parsedProjectId)
-			{
-				callback(jsonError(drogon::k400BadRequest, "Invalid project id."));
+			const auto project = withProject(request, projectId, ProjectAccess::Read, callback);
+			if (!project)
 				return;
-			}
 
 			const auto parsedCommitId = parseUuid(commitId);
 			if (!parsedCommitId)
@@ -90,14 +77,6 @@ namespace StructuraSystems::Server
 				callback(jsonError(drogon::k400BadRequest, "Invalid commit id."));
 				return;
 			}
-
-			const auto project = ProjectService->getProjectById(*parsedProjectId);
-			if (project==nullptr)
-            {
-                const auto response = drogon::HttpResponse::newHttpResponse(drogon::k404NotFound, drogon::CT_APPLICATION_JSON);
-                callback(response);
-                return;
-            }
 
 			const auto commit = ProjectVerService->getCommitById(project, *parsedCommitId);
 			if (commit==nullptr)

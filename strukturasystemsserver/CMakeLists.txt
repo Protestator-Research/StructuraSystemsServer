@@ -35,6 +35,10 @@ set(SOURCES
         src/Services/ProjectVersioningService.cpp
         src/Services/AuthenticationService.h
         src/Services/AuthenticationService.cpp
+        src/Services/AccessControlService.h
+        src/Services/AccessControlService.cpp
+        src/Controller/GroupController.hpp
+        src/Controller/Helper/ProjectAccessHelper.hpp
         src/Controller/DigitalTwinController.hpp
         src/Entities/json/TwinResponse.cpp
         src/Entities/json/TwinResponse.h
@@ -46,7 +50,6 @@ set(SOURCES
         src/Services/DigitalTwinService.h
         src/Filter/JwtFilter.hpp
         src/Entities/db/User.hpp
-        src/Filter/AdministrationFilter.hpp
         src/Filter/CorsFilter.hpp
         src/Entities/json/UserRequest.cpp
         src/Entities/json/UserRequest.h

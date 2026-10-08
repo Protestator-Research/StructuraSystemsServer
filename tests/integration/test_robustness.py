@@ -14,7 +14,7 @@ def headers(admin_token):
 @pytest.fixture
 def project(base_url, headers):
     response = requests.post(
-        f"{base_url}/projects?owner=admin",
+        f"{base_url}/projects",
         json={"name": f"robust_{uuid.uuid4().hex[:8]}", "description": "robustness"},
         headers=headers,
         timeout=10,
