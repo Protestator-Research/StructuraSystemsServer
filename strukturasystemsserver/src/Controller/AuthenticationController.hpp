@@ -13,6 +13,8 @@
 #include "../Entities/json/UserRequest.h"
 #include "../Filter/JwtFilter.hpp"
 #include "../Services/AccessControlService.h"
+#include "../Services/LoginThrottle.h"
+#include "../Services/ServerConfig.h"
 #include "Helper/RequestHelper.hpp"
 #include "Helper/ProjectAccessHelper.hpp"
 
@@ -40,9 +42,21 @@ namespace StructuraSystems::Server
 				callback(jsonError(drogon::k400BadRequest, "Missing or invalid JSON body."));
 				return;
 			}
+			const auto& jsonObject = *payload;
+			const std::string username = jsonObject["username"].isString() ? jsonObject["username"].asString() : std::string();
+			const std::string password = jsonObject["password"].isString() ? jsonObject["password"].asString() : std::string();
+
+			// Checked before the (expensive) password hash runs.
+			auto& throttle = LoginThrottle::getInstance();
+			if (const auto retryAfter = throttle.checkAttempt(clientIp(request, ServerConfig::get().TrustedProxies), username)) {
+				auto response = jsonError(drogon::k429TooManyRequests, "too_many_requests");
+				response->addHeader("Retry-After", std::to_string(retryAfter->count()));
+				callback(response);
+				return;
+			}
+
 			try {
-				const auto& jsonObject = *payload;
-				auto bearrierString = AuthService->authenticateUserWith(jsonObject["username"].asString(), jsonObject["password"].asString());
+				auto bearrierString = AuthService->authenticateUserWith(username, password);
 				auto authenticationResponse = AuthenticationResponse(bearrierString);
 
 				auto response = drogon::HttpResponse::newHttpJsonResponse(authenticationResponse.toJson());
@@ -51,6 +65,7 @@ namespace StructuraSystems::Server
 				return;
 			}
 			catch (...) {
+				throttle.recordFailure(username);
 				callback(drogon::HttpResponse::newHttpResponse(drogon::k401Unauthorized,drogon::CT_TEXT_PLAIN));
 				return;
 			}
@@ -137,7 +152,9 @@ namespace StructuraSystems::Server
 			}
 
 			try {
-				if (!AuthService->changeOwnPassword(user->username(), oldPassword, newPassword)) {
+				// The JwtFilter has validated the header; the current session stays valid, all others of the user are revoked.
+				const auto currentToken = request->getHeader("Authorization").substr(7);
+				if (!AuthService->changeOwnPassword(user->username(), oldPassword, newPassword, currentToken)) {
 					callback(jsonError(drogon::k401Unauthorized, "The old password is wrong."));
 					return;
 				}

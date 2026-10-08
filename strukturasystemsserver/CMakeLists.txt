@@ -37,6 +37,11 @@ set(SOURCES
         src/Services/AuthenticationService.cpp
         src/Services/AccessControlService.h
         src/Services/AccessControlService.cpp
+        src/Services/SessionStore.h
+        src/Services/SessionStore.cpp
+        src/Services/LoginThrottle.h
+        src/Services/LoginThrottle.cpp
+        src/Services/ServerConfig.h
         src/Controller/GroupController.hpp
         src/Controller/Helper/ProjectAccessHelper.hpp
         src/Controller/DigitalTwinController.hpp

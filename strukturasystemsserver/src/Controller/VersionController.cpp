@@ -7,14 +7,11 @@
 #include <boost/algorithm/string.hpp>
 
 namespace StructuraSystems::Server {
-    std::shared_ptr<VersionController> VersionController::Instance = nullptr;
-
     std::shared_ptr<VersionController> VersionController::getInstance() {
-        if (Instance == nullptr) {
-            struct versionControllerImplementation : public VersionController {};
-            Instance = std::make_shared<versionControllerImplementation>();
-        }
-        return Instance;
+        struct versionControllerImplementation : public VersionController {};
+        // A function-local static is initialised exactly once, even with concurrent first calls.
+        static const std::shared_ptr<VersionController> instance = std::make_shared<versionControllerImplementation>();
+        return instance;
     }
 
     bool VersionController::isOtherVersionLower(std::string version) {

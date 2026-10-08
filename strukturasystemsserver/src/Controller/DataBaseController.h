@@ -1,5 +1,6 @@
 ﻿#pragma once
 
+#include <atomic>
 #include <string>
 #include <memory>
 #include <vector>
@@ -9,6 +10,7 @@
 // mongocxx 4.6: uri.hpp must come after client.hpp, otherwise to_v1() in options/find.hpp is ambiguous
 #include <mongocxx/client.hpp>
 #include <mongocxx/database.hpp>
+#include <mongocxx/pool.hpp>
 #include <mongocxx/uri.hpp>
 #include "../Entities/db/User.hpp"
 
@@ -81,12 +83,15 @@ namespace StructuraSystems::Server
 
 		void addVersionToDatabase();
  
-		static DataBaseController* Instance;
+		static mongocxx::uri buildUri(const std::string& dBAddress, const std::string& username, const std::string& password);
 
-		mongocxx::instance inst;
-		mongocxx::uri uri;
-		mongocxx::client client;
-		mongocxx::database database;
+		static std::atomic<DataBaseController*> Instance;
+
+		// The order matters: the instance must exist before and outlive the pool. Every method
+		// acquires its own client from the pool, a single client is not thread safe.
+		mongocxx::instance Inst;
+		mongocxx::pool Pool;
+		std::string DatabaseName;
 
 		void initializeDatabaseIfNotAvailable();
 		bool checkDatabaseState();

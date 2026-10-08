@@ -28,22 +28,26 @@
 #include <iostream>
 #include <fstream>
 #include <iomanip>
+#include <mutex>
 
 
 namespace StructuraSystems::Server
 {
-	DataBaseController* DataBaseController::Instance = nullptr;
+	std::atomic<DataBaseController*> DataBaseController::Instance{nullptr};
 
 	DataBaseController* DataBaseController::getInstance()
 	{
-		if (!Instance)
+		auto* instance = Instance.load();
+		if (!instance)
 			throw std::runtime_error("No Instance available");
 
-		return Instance;
+		return instance;
 	}
 
 	std::vector<std::shared_ptr<Project>> DataBaseController::getAllProjects()
 	{
+		auto client = Pool.acquire();
+		auto database = (*client)[DatabaseName];
 		auto collection = database["projects"];
 		auto cursor = collection.find({});
 
@@ -61,6 +65,8 @@ namespace StructuraSystems::Server
 
 	void DataBaseController::addMultibleProjects(std::vector<std::shared_ptr<Project>> projects)
 	{
+		auto client = Pool.acquire();
+		auto database = (*client)[DatabaseName];
 		std::vector<bsoncxx::document::value> dbProjects;
 		for (const auto& project : projects)
 		{
@@ -74,6 +80,8 @@ namespace StructuraSystems::Server
 
 	void DataBaseController::addProject(std::shared_ptr<Project> project)
 	{
+		auto client = Pool.acquire();
+		auto database = (*client)[DatabaseName];
 		std::string jsonString = project->getDataBaseString();
 		replace(jsonString, "@id", "_id");
 		nlohmann::json json = nlohmann::json::parse(jsonString);
@@ -82,6 +90,8 @@ namespace StructuraSystems::Server
 
 	void DataBaseController::updateProject(std::shared_ptr<Project> project)
 	{
+		auto client = Pool.acquire();
+		auto database = (*client)[DatabaseName];
 		std::string jsonString = project->getDataBaseString();
 		replace(jsonString, "@id", "_id");
 		nlohmann::json json = nlohmann::json::parse(jsonString);
@@ -103,12 +113,16 @@ namespace StructuraSystems::Server
 
 	bool DataBaseController::deleteProject(std::shared_ptr<Project> project)
 	{
+		auto client = Pool.acquire();
+		auto database = (*client)[DatabaseName];
 		auto result = database["projects"].delete_one(bsoncxx::builder::basic::make_document(bsoncxx::builder::basic::kvp("_id", boost::uuids::to_string(project->getId())), bsoncxx::builder::basic::kvp("name", project->getName()), bsoncxx::builder::basic::kvp("description", project->getDescription()), bsoncxx::builder::basic::kvp("defaultBranch", "{\"@id\":" + boost::uuids::to_string(project->getDefaultBranch()->getId()) + "}")));
 		return (result.has_value() && (result.value().deleted_count() > 0));
 	}
 
 	void DataBaseController::addMultibleBranches(std::map<boost::uuids::uuid, std::vector<std::shared_ptr<SysMLv2::REST::Branch>>> projectBranchMap)
 	{
+		auto client = Pool.acquire();
+		auto database = (*client)[DatabaseName];
 		std::vector<bsoncxx::document::value> dbBranches;
 		for (const auto& [projectId , branches] : projectBranchMap)
 		{
@@ -125,6 +139,8 @@ namespace StructuraSystems::Server
 
 	void DataBaseController::addBranch(boost::uuids::uuid projectId, std::shared_ptr<SysMLv2::REST::Branch> branch)
 	{
+		auto client = Pool.acquire();
+		auto database = (*client)[DatabaseName];
 		std::string jsonString = branch->serializeToJson();
 		replace(jsonString, "@id", "_id");
 		nlohmann::json json = nlohmann::json::parse(jsonString);
@@ -133,6 +149,8 @@ namespace StructuraSystems::Server
 	}
 
 	void DataBaseController::updateBranch(std::shared_ptr<SysMLv2::REST::Branch> branch) {
+		auto client = Pool.acquire();
+		auto database = (*client)[DatabaseName];
 		auto collection = database[BRANCHES_COLLECTION_IDENTIFIER];
 		auto filter = bsoncxx::builder::stream::document{} << "_id" << boost::uuids::to_string(branch->getId()) << bsoncxx::builder::stream::finalize;
 
@@ -151,6 +169,8 @@ namespace StructuraSystems::Server
 
 	std::map<boost::uuids::uuid, std::vector<std::shared_ptr<SysMLv2::REST::Branch>>> DataBaseController::getAllBranches()
 	{
+		auto client = Pool.acquire();
+		auto database = (*client)[DatabaseName];
 		std::map<boost::uuids::uuid, std::vector<std::shared_ptr<SysMLv2::REST::Branch>>> returnValue;
 
 		auto collection = database["branches"];
@@ -175,6 +195,8 @@ namespace StructuraSystems::Server
 	}
 
 	void DataBaseController::deleteBranch(std::shared_ptr<SysMLv2::REST::Branch> branch) {
+		auto client = Pool.acquire();
+		auto database = (*client)[DatabaseName];
 		try {
 			auto collection = database["branches"];
 
@@ -193,6 +215,8 @@ namespace StructuraSystems::Server
 
 	void DataBaseController::addMultibleCommits(std::map<boost::uuids::uuid, std::vector<std::shared_ptr<SysMLv2::REST::Commit>>> projectCommitMap)
 	{
+		auto client = Pool.acquire();
+		auto database = (*client)[DatabaseName];
 		std::vector<bsoncxx::document::value> dbCommits;
 		for (const auto& [proj_id, commits] : projectCommitMap)
 		{
@@ -210,6 +234,8 @@ namespace StructuraSystems::Server
 
 	void DataBaseController::addCommit(std::shared_ptr<SysMLv2::REST::Commit> commit)
 	{
+		auto client = Pool.acquire();
+		auto database = (*client)[DatabaseName];
 		std::string commitJsonString = commit->serializeToJson();
 		replace(commitJsonString, "@id", "_id");
 
@@ -218,6 +244,8 @@ namespace StructuraSystems::Server
 
 	std::map<boost::uuids::uuid, std::vector<std::shared_ptr<SysMLv2::REST::Commit>>> DataBaseController::getAllCommits()
 	{
+		auto client = Pool.acquire();
+		auto database = (*client)[DatabaseName];
 		std::map<boost::uuids::uuid, std::vector<std::shared_ptr<SysMLv2::REST::Commit>>> returnValue;
 
 		auto collection = database["commits"];
@@ -242,6 +270,8 @@ namespace StructuraSystems::Server
 
 	void DataBaseController::addMultibleDataVersions(std::map<boost::uuids::uuid, std::shared_ptr<SysMLv2::REST::DataVersion>> commitIdDataVersions)
 	{
+		auto client = Pool.acquire();
+		auto database = (*client)[DatabaseName];
 		std::vector<bsoncxx::document::value> dbDataVersions;
 		for (const auto& [commitId, dataVersion] : commitIdDataVersions)
 		{
@@ -257,6 +287,8 @@ namespace StructuraSystems::Server
 
 	void DataBaseController::addDataVersion(boost::uuids::uuid commitId, std::shared_ptr<SysMLv2::REST::DataVersion> dataVersion)
 	{
+		auto client = Pool.acquire();
+		auto database = (*client)[DatabaseName];
 		database["data_versions"].insert_one(bsoncxx::builder::basic::make_document(
 			bsoncxx::builder::basic::kvp("_id", boost::uuids::to_string(dataVersion->getId())),
 			bsoncxx::builder::basic::kvp(SysMLv2::REST::JSON_PAYLOAD_ENTITY, dataVersion->getPayload()->serializeToJson()),
@@ -266,6 +298,8 @@ namespace StructuraSystems::Server
 
 	std::map<boost::uuids::uuid, std::shared_ptr<SysMLv2::REST::DataVersion>> DataBaseController::getAllDataVersions()
 	{
+		auto client = Pool.acquire();
+		auto database = (*client)[DatabaseName];
 		auto collection = database["data_versions"];
 		auto cursor = collection.find({});
 		std::map<boost::uuids::uuid, std::shared_ptr<SysMLv2::REST::DataVersion>> returnValue;
@@ -286,6 +320,8 @@ namespace StructuraSystems::Server
 
 	void DataBaseController::addMultibleElements(std::map<boost::uuids::uuid, std::shared_ptr<KerML::Entities::Element>> projectIDElementData)
 	{
+		auto client = Pool.acquire();
+		auto database = (*client)[DatabaseName];
 		std::vector<bsoncxx::document::value> dbElements;
 		for (const auto& [projectId, dataElement]: projectIDElementData)
 		{
@@ -301,6 +337,8 @@ namespace StructuraSystems::Server
 
 	void DataBaseController::addElement(boost::uuids::uuid projectId, std::shared_ptr<KerML::Entities::Element> elementData)
 	{
+		auto client = Pool.acquire();
+		auto database = (*client)[DatabaseName];
 		std::string jsonString = elementData->serializeToJson();
 		replace(jsonString, "@id", "_id");
 		nlohmann::json json = nlohmann::json::parse(jsonString);
@@ -310,6 +348,8 @@ namespace StructuraSystems::Server
 
 	std::map<boost::uuids::uuid, std::vector<std::shared_ptr<KerML::Entities::Element>>>DataBaseController::getAllElements()
 	{
+		auto client = Pool.acquire();
+		auto database = (*client)[DatabaseName];
 		auto collection = database["data_elements"];
 		auto cursor = collection.find({});
 		std::map<boost::uuids::uuid, std::vector<std::shared_ptr<KerML::Entities::Element>>> elementProijectIDMap;
@@ -331,6 +371,8 @@ namespace StructuraSystems::Server
 	}
 
 	void DataBaseController::addTag(boost::uuids::uuid , std::shared_ptr<SysMLv2::REST::Tag> tag) {
+		auto client = Pool.acquire();
+		auto database = (*client)[DatabaseName];
 		std::string jsonString = tag->serializeToJson();
 		replace(jsonString, "@id", "_id");
 		nlohmann::json json = nlohmann::json::parse(jsonString);
@@ -338,6 +380,8 @@ namespace StructuraSystems::Server
 	}
 
 	void DataBaseController::deleteTag(std::shared_ptr<SysMLv2::REST::Tag> tag) {
+		auto client = Pool.acquire();
+		auto database = (*client)[DatabaseName];
 		try {
 			auto collection = database["tags"];
 
@@ -355,6 +399,8 @@ namespace StructuraSystems::Server
 	}
 
 	std::map<boost::uuids::uuid, std::vector<std::shared_ptr<SysMLv2::REST::Tag>>> DataBaseController::getAllTags() {
+		auto client = Pool.acquire();
+		auto database = (*client)[DatabaseName];
 		std::map<boost::uuids::uuid, std::vector<std::shared_ptr<SysMLv2::REST::Tag>>> returnValue;
 
 		auto collection = database["tags"];
@@ -375,6 +421,8 @@ namespace StructuraSystems::Server
 	}
 
 	void DataBaseController::addTwin(boost::uuids::uuid, std::shared_ptr<StructuraSystems::Server::TwinResponse> twinTag) {
+		auto client = Pool.acquire();
+		auto database = (*client)[DatabaseName];
 		std::string jsonString = twinTag->serializeToJson();
 		replace(jsonString, "@id", "_id");
 		nlohmann::json json = nlohmann::json::parse(jsonString);
@@ -382,6 +430,8 @@ namespace StructuraSystems::Server
 	}
 
 	void DataBaseController::deleteTwin(std::shared_ptr<StructuraSystems::Server::TwinResponse> twinTag) {
+		auto client = Pool.acquire();
+		auto database = (*client)[DatabaseName];
 		try {
 			auto collection = database["digital_twins"];
 
@@ -399,6 +449,8 @@ namespace StructuraSystems::Server
 	}
 
 	std::map<boost::uuids::uuid, std::vector<std::shared_ptr<StructuraSystems::Server::TwinResponse>>> DataBaseController::getAllTwins() {
+		auto client = Pool.acquire();
+		auto database = (*client)[DatabaseName];
 		std::map<boost::uuids::uuid, std::vector<std::shared_ptr<TwinResponse>>> returnValue;
 
 		auto collection = database["digital_twins"];
@@ -420,11 +472,15 @@ namespace StructuraSystems::Server
 
 	void DataBaseController::addUser(const User& user)
 	{
+		auto client = Pool.acquire();
+		auto database = (*client)[DatabaseName];
 		database["users"].insert_one(bsoncxx::from_json(user.getJson()));
 	}
 
 	std::map<std::string, User> DataBaseController::getAllUser()
 	{
+		auto client = Pool.acquire();
+		auto database = (*client)[DatabaseName];
 		auto collection = database["users"];
 		auto cursor = collection.find({});
 		std::map<std::string, User> returnValue;
@@ -441,6 +497,8 @@ namespace StructuraSystems::Server
 	}
 
 	void DataBaseController::removeUser(std::string username) {
+		auto client = Pool.acquire();
+		auto database = (*client)[DatabaseName];
 		try {
 			auto collection = database["users"];
 			auto filter = bsoncxx::builder::stream::document{} << "_id" << username << bsoncxx::builder::stream::finalize;
@@ -454,6 +512,8 @@ namespace StructuraSystems::Server
 	}
 
 	void DataBaseController::changeUser(const User &user) {
+		auto client = Pool.acquire();
+		auto database = (*client)[DatabaseName];
 		auto collection = database["users"];
 		auto filter = bsoncxx::builder::stream::document{} << "_id" << user.username() << bsoncxx::builder::stream::finalize;
 
@@ -478,14 +538,16 @@ namespace StructuraSystems::Server
 
 	DataBaseController* DataBaseController::createInstance(std::string dbAddress, std::string username, std::string password, std::string databaseName)
 	{
-		if (Instance)
-			return Instance;
-
-		Instance = new DataBaseController(dbAddress, username, password, databaseName);
-		return Instance;
+		// std::call_once makes the creation thread safe. If the constructor throws, the flag stays
+		// unset and the next call tries again.
+		static std::once_flag createFlag;
+		std::call_once(createFlag, [&] {
+			Instance.store(new DataBaseController(dbAddress, username, password, databaseName));
+		});
+		return Instance.load();
 	}
 
-	DataBaseController::DataBaseController(std::string dBAddress, std::string username, std::string password, std::string databaseName)
+	mongocxx::uri DataBaseController::buildUri(const std::string& dBAddress, const std::string& username, const std::string& password)
 	{
 		std::string uri_string = "";
 
@@ -494,10 +556,14 @@ namespace StructuraSystems::Server
 		else
 			uri_string += "mongodb://" + username + ":" + password + "@" + dBAddress;
 
-		uri = mongocxx::uri(uri_string);
-		client = mongocxx::client(uri);
+		return mongocxx::uri(uri_string);
+	}
 
-		database = client[databaseName];
+	DataBaseController::DataBaseController(std::string dBAddress, std::string username, std::string password, std::string databaseName)
+		: Inst(), Pool(buildUri(dBAddress, username, password)), DatabaseName(std::move(databaseName))
+	{
+		auto client = Pool.acquire();
+		auto database = (*client)[DatabaseName];
 
 // #ifndef NDEBUG
 		// deleteDatabaseIfDebug();
@@ -507,12 +573,16 @@ namespace StructuraSystems::Server
 	}
 
 	void DataBaseController::addVersionToDatabase() {
+		auto client = Pool.acquire();
+		auto database = (*client)[DatabaseName];
 		const auto version = VersionController::getInstance()->getVersionElement();
 		database[VERSION_COLLECTION_IDENTIFIER].insert_one(bsoncxx::from_json(version.serialiseJson()));
 	}
 
 	void DataBaseController::initializeDatabaseIfNotAvailable()
 	{
+		auto client = Pool.acquire();
+		auto database = (*client)[DatabaseName];
 		database.create_collection(PROJECT_COLLECTION_IDENTIFIER);
 		database.create_collection(DATA_ELEMENTS_COLLECTION_IDENTIFIER);
 		database.create_collection(COMMIT_COLLECTION_IDENTIFIER);
@@ -664,6 +734,8 @@ namespace StructuraSystems::Server
 	}
 
 	bool DataBaseController::checkDatabaseState() {
+		auto client = Pool.acquire();
+		auto database = (*client)[DatabaseName];
 		const auto collectionNames = database.list_collection_names();
 		if (collectionNames.empty()) {
 			initializeDatabaseIfNotAvailable();
@@ -696,6 +768,8 @@ namespace StructuraSystems::Server
 
 	void DataBaseController::deleteDatabaseIfDebug()
 	{
+		auto client = Pool.acquire();
+		auto database = (*client)[DatabaseName];
 		std::cout << "\033[31m" << "----------------------------------------------------------------------" << std::endl;
 		std::cout << "       Deleting Database." << std::endl;
 		std::cout << "----------------------------------------------------------------------" << "\033[0m" << std::endl;

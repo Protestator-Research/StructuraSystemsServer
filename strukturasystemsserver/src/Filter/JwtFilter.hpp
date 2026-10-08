@@ -27,27 +27,21 @@ namespace StructuraSystems::Server {
 
             try {
 
-                if (AuthenticationService::getInstance()->isTokenAuthenticated(token)) {
-                    const auto user = AuthenticationService::getInstance()->getUserFromDatabase(token);
-                    if (!user) {
-                        auto res = drogon::HttpResponse::newHttpResponse();
-                        res->setStatusCode(drogon::k401Unauthorized);
-                        fcb(res);
-                        return;
-                    }
-
-                    if (user->mustChangePassword() && !isAllowedWithPendingPasswordChange(req)) {
-                        fcb(jsonError(drogon::k403Forbidden, "password_change_required"));
-                        return;
-                    }
-
-                    fccb();
+                // Validates the session (idle and maximum lifetime) and returns nothing for a user that no longer exists.
+                const auto user = AuthenticationService::getInstance()->getUserFromDatabase(token);
+                if (!user) {
+                    auto res = drogon::HttpResponse::newHttpResponse();
+                    res->setStatusCode(drogon::k401Unauthorized);
+                    fcb(res);
                     return;
                 }
 
-                auto res = drogon::HttpResponse::newHttpResponse();
-                res->setStatusCode(drogon::k401Unauthorized);
-                fcb(res);
+                if (user->mustChangePassword() && !isAllowedWithPendingPasswordChange(req)) {
+                    fcb(jsonError(drogon::k403Forbidden, "password_change_required"));
+                    return;
+                }
+
+                fccb();
 
             } catch (...) {
                 auto res = drogon::HttpResponse::newHttpResponse();

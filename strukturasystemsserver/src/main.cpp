@@ -12,12 +12,16 @@
 #include "Controller/ElementsController.hpp"
 #include "Controller/DigitalTwinController.hpp"
 #include "Services/AuthenticationService.h"
+#include "Services/LoginThrottle.h"
+#include "Services/ServerConfig.h"
 #include "Filter/JwtFilter.hpp"
 #include "Filter/CorsFilter.hpp"
 
 #include <drogon/drogon.h>
 #include <sodium.h>
 
+#include <chrono>
+#include <cstdint>
 #include <cstdlib>
 #include <iostream>
 #include <string>
@@ -39,6 +43,13 @@ namespace {
             if (!value.empty())
                 return value;
         }
+        return defaultValue;
+    }
+
+    /// Reads a positive integer. Missing, non-numeric and non-positive values give the default.
+    int64_t readConfigPositiveInt(const Json::Value& config, const char* key, int64_t defaultValue) {
+        if (config[key].isIntegral() && config[key].asInt64() > 0)
+            return config[key].asInt64();
         return defaultValue;
     }
 
@@ -81,7 +92,15 @@ int main() {
     if (const auto value = readEnv("MONGO_DATABASE"); !value.empty())
         dbDatabaseArg = value;
 
-    [[maybe_unused]] const auto trustedProxies = readConfigStringArray(customConfig, "trusted_proxies", {"127.0.0.1"});
+    auto& serverConfig = StructuraSystems::Server::ServerConfig::get();
+    serverConfig.TrustedProxies = readConfigStringArray(customConfig, "trusted_proxies", {"127.0.0.1"});
+    serverConfig.SessionIdleTimeout = std::chrono::seconds(readConfigPositiveInt(customConfig, "session_idle_seconds", serverConfig.SessionIdleTimeout.count()));
+    serverConfig.SessionMaxLifetime = std::chrono::seconds(readConfigPositiveInt(customConfig, "session_max_seconds", serverConfig.SessionMaxLifetime.count()));
+    auto& loginLimits = serverConfig.LoginLimits;
+    loginLimits.MaxFailuresPerUser = static_cast<std::size_t>(readConfigPositiveInt(customConfig, "login_max_failures_per_user", static_cast<int64_t>(loginLimits.MaxFailuresPerUser)));
+    loginLimits.FailureWindow = std::chrono::seconds(readConfigPositiveInt(customConfig, "login_failure_window_seconds", loginLimits.FailureWindow.count()));
+    loginLimits.MaxRequestsPerIp = static_cast<std::size_t>(readConfigPositiveInt(customConfig, "login_max_requests_per_ip", static_cast<int64_t>(loginLimits.MaxRequestsPerIp)));
+    loginLimits.IpWindow = std::chrono::seconds(readConfigPositiveInt(customConfig, "login_ip_window_seconds", loginLimits.IpWindow.count()));
     [[maybe_unused]] const auto allowedOrigins = readConfigStringArray(customConfig, "allowed_origins", {});
 
     try {
@@ -110,6 +129,14 @@ int main() {
         resp->addHeader("Access-Control-Max-Age", "86400");
         resp->addHeader("Access-Control-Allow-Credentials", "true");
     };
+
+    // Housekeeping for sessions and login throttling. The loop is only available once the framework runs.
+    drogon::app().registerBeginningAdvice([] {
+        drogon::app().getLoop()->runEvery(300.0, [] {
+            StructuraSystems::Server::AuthenticationService::getInstance()->purgeExpiredSessions();
+            StructuraSystems::Server::LoginThrottle::getInstance().purgeExpired();
+        });
+    });
 
     drogon::app()
         .registerPreRoutingAdvice([addHeader](const drogon::HttpRequestPtr& req, drogon::AdviceCallback&& acb, drogon::AdviceChainCallback&& accb)

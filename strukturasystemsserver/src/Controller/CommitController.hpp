@@ -130,7 +130,7 @@ namespace StructuraSystems::Server
             }
 
 			const auto response = drogon::HttpResponse::newHttpResponse(drogon::k200OK, drogon::CT_APPLICATION_JSON);
-			response->setBody(branch->serializeToJson());
+			response->setBody(ProjectVerService->serializeBranch(branch));
 			callback(response);
 		}
 
@@ -290,7 +290,7 @@ namespace StructuraSystems::Server
 			const auto& branch = ProjectVerService->createBranch(project, branchName, branchHead);
 
 			const auto response = drogon::HttpResponse::newHttpResponse(drogon::k200OK, drogon::CT_APPLICATION_JSON);
-			response->setBody(branch->serializeToJson());
+			response->setBody(ProjectVerService->serializeBranch(branch));
 			callback(response);
 		}
 
@@ -324,7 +324,7 @@ namespace StructuraSystems::Server
             }
 
 			const auto response = drogon::HttpResponse::newHttpResponse(drogon::k200OK, drogon::CT_APPLICATION_JSON);
-			response->setBody(branch->serializeToJson());
+			response->setBody(ProjectVerService->serializeBranch(branch));
 			callback(response);
 		}
 
@@ -339,7 +339,7 @@ namespace StructuraSystems::Server
 			std::string returnValue = "[\r\n";
 			for (size_t i = 0; i < branches.size(); i++)
 			{
-				returnValue += branches[i]->serializeToJson();
+				returnValue += ProjectVerService->serializeBranch(branches[i]);
 				if (i < (branches.size() - 1))
 					returnValue += ",\r\n";
 			}

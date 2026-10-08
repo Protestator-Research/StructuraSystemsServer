@@ -1,6 +1,8 @@
 ﻿#pragma once
 
 #include <map>
+#include <shared_mutex>
+#include <string>
 #include <stdexcept>
 #include <boost/uuid.hpp>
 #include <sysmlv2/service/interfaces/IProjectVersioningService.h>
@@ -94,16 +96,30 @@ namespace StructuraSystems::Server
 			std::shared_ptr<SysMLv2::REST::Commit> baseCommit, std::shared_ptr<SysMLv2::REST::Commit> compareCommit,
 			std::vector<int> changeType) override;
 
+		/// Serialises the branch while holding the read lock, so a concurrent createCommit cannot
+		/// replace the head while it is read.
+		std::string serializeBranch(const std::shared_ptr<SysMLv2::REST::Branch>& branch);
+
+		/// Registers the default branch of a new project and creates its initial commit.
+		/// Must not call back into ServerProjectService (lock order: ServerProjectService -> ProjectVersioningService).
 		void addBranchFromProject(std::shared_ptr<SysMLv2::REST::Project> project);
 
 	private:
 		ProjectVersioningService();
 
+		/// Variant of createCommit(change, branch, previousCommits, project) for callers that already hold Mutex.
+		std::shared_ptr<SysMLv2::REST::Commit> createCommitUnlocked(std::shared_ptr<SysMLv2::REST::DataVersion> change,
+			std::shared_ptr<SysMLv2::REST::Branch> branch,
+			std::vector<std::shared_ptr<SysMLv2::REST::Commit>> previousCommits,
+			std::shared_ptr<SysMLv2::REST::Project> project);
+
+		/// Guards the three maps and the Branch/Commit objects stored in them. Not recursive.
+		mutable std::shared_mutex Mutex;
+
 		std::map<boost::uuids::uuid, std::vector<std::shared_ptr<SysMLv2::REST::Commit>>> ProjectIdCommitMap;
 		std::map<boost::uuids::uuid, std::vector<std::shared_ptr<SysMLv2::REST::Branch>>> ProjectIdBranchMap;
 		std::map<boost::uuids::uuid, std::vector<std::shared_ptr<SysMLv2::REST::Tag>>> ProjectIdTagMap;
 
-		static std::shared_ptr<ProjectVersioningService> Instance;
 		DataBaseController* DBController;
 	};
 

@@ -12,7 +12,11 @@ import requests
 from pymongo import MongoClient
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-SERVER_BINARY = REPO_ROOT / "build" / "Debug" / "debug" / "StructuraSystemsServer"
+# STRUCTURA_SERVER_BINARY allows running the tests against another build, e.g. an ASan build.
+SERVER_BINARY = Path(os.environ.get(
+    "STRUCTURA_SERVER_BINARY",
+    str(REPO_ROOT / "build" / "Debug" / "debug" / "StructuraSystemsServer"),
+))
 CONAN_RUN_ENV = REPO_ROOT / "build" / "Debug" / "generators" / "conanrun.sh"
 TEST_DB = "structura_systems_test"
 TEST_PORT = 18088
@@ -67,10 +71,11 @@ def server_command():
 
 
 @contextmanager
-def start_server(db_name, port, extra_env=None, drop_db=True, expect_ready=True):
+def start_server(db_name, port, extra_env=None, drop_db=True, expect_ready=True, custom_config=None):
     """Start a server on the given database and yield (process, output_path).
 
     With expect_ready=False the caller deals with start-up failures itself.
+    custom_config entries are added to (and override) the custom_config section of the config file.
     """
     assert db_name != "structura_systems"
     assert db_name.startswith("structura_systems_")
@@ -96,6 +101,7 @@ def start_server(db_name, port, extra_env=None, drop_db=True, expect_ready=True)
             "log_level": "INFO",
         },
     }
+    config["custom_config"].update(custom_config or {})
     config_path = tmp / "config.json"
     config_path.write_text(json.dumps(config))
     output_path = tmp / "server.out"
@@ -141,7 +147,9 @@ def start_server(db_name, port, extra_env=None, drop_db=True, expect_ready=True)
 @pytest.fixture(scope="session")
 def server(base_url):
     assert TEST_DB != "structura_systems"
-    with start_server(TEST_DB, TEST_PORT) as (proc, _):
+    # Many tests log in from 127.0.0.1, so the throttle limits are far above anything the suite reaches.
+    limits = {"login_max_requests_per_ip": 100000, "login_max_failures_per_user": 1000}
+    with start_server(TEST_DB, TEST_PORT, custom_config=limits) as (proc, _):
         yield proc
 
 

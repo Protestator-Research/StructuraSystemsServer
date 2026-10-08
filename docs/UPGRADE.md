@@ -59,6 +59,33 @@ Projekte ohne Eigentuemer, die keine Bibliotheksprojekte sind, sind nur fuer Adm
 
 Initialer Administrator: Ist die Benutzertabelle leer, wird `admin` angelegt. Das Passwort stammt aus der Umgebungsvariable `STRUCTURA_ADMIN_PASSWORD`. Ist sie nicht gesetzt, erzeugt der Server ein zufaelliges Passwort mit 24 Zeichen, gibt es einmalig auf stdout aus und setzt `mustChangePassword`. Das feste `admin`/`admin` entfaellt.
 
+## Phase 3: Sitzungen, Login-Schutz und Nebenlaeufigkeit
+
+**Alle Benutzer muessen sich nach dem Update neu anmelden.** Sitzungen liegen nur im Speicher; bisherige Tokens sind nach dem Neustart ungueltig. Die neuen Tokens sind laenger (32 Zufallsbytes, URL-sicheres Base64 ohne Padding, 43 Zeichen). Clients, die das Token in einem festen Feld speichern, duerfen keine kuerzere Laenge annehmen.
+
+Verhalten:
+
+- Jeder Login erzeugt ein eigenes Token. Mehrere Anmeldungen desselben Benutzers teilen kein Token mehr.
+- Ein Token verfaellt nach 1 Stunde ohne Nutzung und spaetestens 12 Stunden nach dem Login.
+- `PUT /me/password` behaelt das Token der aufrufenden Sitzung, alle uebrigen Sitzungen des Benutzers werden ungueltig. Loeschen eines Benutzers sowie Passwort- oder Rollenaenderung durch einen Administrator beenden alle seine Sitzungen.
+- `POST /login` ist begrenzt: hoechstens 5 fehlgeschlagene Anmeldungen pro Benutzername in 15 Minuten (ein erfolgreicher Login setzt den Zaehler nicht zurueck) und hoechstens 20 Anfragen pro Client-IP und Minute. Bei Ueberschreitung antwortet der Server mit 429, dem Header `Retry-After` (Sekunden) und `{"error":"too_many_requests"}`, auch bei richtigem Passwort.
+- Hinter einem Reverse Proxy zaehlt die erste Adresse aus `X-Forwarded-For` nur dann als Client-IP, wenn die direkte Gegenstelle in `trusted_proxies` steht. Sonst gilt die Adresse der Verbindung.
+
+Neue optionale Schluessel in `custom_config` (alle Werte positive ganze Zahlen, sonst gilt der Standard):
+
+| Schluessel | Standard | Bedeutung |
+|---|---|---|
+| `session_idle_seconds` | 3600 | Leerlauf-Timeout einer Sitzung |
+| `session_max_seconds` | 43200 | Maximale Lebensdauer einer Sitzung |
+| `login_max_failures_per_user` | 5 | Fehlversuche pro Benutzername |
+| `login_failure_window_seconds` | 900 | Zeitfenster dafuer |
+| `login_max_requests_per_ip` | 20 | Login-Anfragen pro Client-IP |
+| `login_ip_window_seconds` | 60 | Zeitfenster dafuer |
+
+`trusted_proxies` (bereits seit Phase 0 gelesen, Standard `["127.0.0.1"]`) wird jetzt ausgewertet. Ist der Server direkt erreichbar, sollte die Liste leer sein, damit `X-Forwarded-For` nicht gefaelscht werden kann.
+
+Intern: Die MongoDB-Verbindung nutzt jetzt einen Connection-Pool, die Services sind mit Lese-/Schreibsperren gegen parallele Zugriffe geschuetzt. Das erfordert keine Konfigurationsaenderung.
+
 ## Schutz vor Datenverlust
 
 Fehlt die Collection `versions`, obwohl andere Collections existieren, loescht der Server die Datenbank nicht mehr. Er bricht den Start mit einer Fehlermeldung ab. Nur in Debug-Builds und nur, wenn alle vorhandenen Collections leer sind, wird neu initialisiert.

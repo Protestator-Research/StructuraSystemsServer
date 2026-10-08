@@ -25,8 +25,6 @@ namespace StructuraSystems::Server {
 	private:
 		ElementNavigationService() = default;
 
-		static std::shared_ptr<ElementNavigationService> Instance;
-
 		std::map<boost::uuids::uuid, std::vector<std::shared_ptr<KerML::Entities::Element>>> CommitIdElementsMap;
 	};
 }

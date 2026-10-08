@@ -9,17 +9,12 @@
 
 namespace StructuraSystems::Server
 {
-	std::shared_ptr<ElementNavigationService> ElementNavigationService::Instance = nullptr;
-
-
 	std::shared_ptr<ElementNavigationService> ElementNavigationService::getInstance()
 	{
-		if (Instance == nullptr) {
-			struct concreteElementService : public  ElementNavigationService {};
-			Instance = std::make_shared<concreteElementService>();
-		}
-
-		return Instance;
+		struct concreteElementService : public  ElementNavigationService {};
+		// A function-local static is initialised exactly once, even with concurrent first calls.
+		static const std::shared_ptr<ElementNavigationService> instance = std::make_shared<concreteElementService>();
+		return instance;
 	}
 
 	std::vector<std::shared_ptr<KerML::Entities::Element>> ElementNavigationService::getElements(std::shared_ptr<SysMLv2::REST::Project> , std::shared_ptr<SysMLv2::REST::Commit> commit)

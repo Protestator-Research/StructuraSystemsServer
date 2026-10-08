@@ -11,6 +11,8 @@
 #include <sysmlv2/rest/entities/Tag.h>
 
 #include <algorithm>
+#include <mutex>
+#include <shared_mutex>
 
 #include "../Controller/CommitController.hpp"
 #include "../Entities/db/Project.hpp"
@@ -18,21 +20,18 @@
 namespace StructuraSystems::Server
 {
 
-	std::shared_ptr<ProjectVersioningService> ProjectVersioningService::Instance = nullptr;
-
 	std::shared_ptr<ProjectVersioningService> ProjectVersioningService::getInstance()
 	{
-		if (Instance == nullptr) {
-			struct concreteProjectVersioningService : public ProjectVersioningService {};
-			Instance = std::make_shared<concreteProjectVersioningService>();
-		}
-
-		return Instance;
+		struct concreteProjectVersioningService : public ProjectVersioningService {};
+		// A function-local static is initialised exactly once, even with concurrent first calls.
+		static const std::shared_ptr<ProjectVersioningService> instance = std::make_shared<concreteProjectVersioningService>();
+		return instance;
 	}
 
 	std::vector<std::shared_ptr<SysMLv2::REST::Commit>> ProjectVersioningService::getCommits(
 		std::shared_ptr<SysMLv2::REST::Project> project)
 	{
+		std::shared_lock lock(Mutex);
 		const auto it = ProjectIdCommitMap.find(project->getId());
 		if (it == ProjectIdCommitMap.end())
 			return {};
@@ -42,12 +41,14 @@ namespace StructuraSystems::Server
 	std::shared_ptr<SysMLv2::REST::Commit> ProjectVersioningService::getHeadCommit(
 		std::shared_ptr<SysMLv2::REST::Project>, std::shared_ptr<SysMLv2::REST::Branch> branch)
 	{
+		std::shared_lock lock(Mutex);
 		return branch->getHead();
 	}
 
 	std::shared_ptr<SysMLv2::REST::Commit> ProjectVersioningService::getCommitById(
 		std::shared_ptr<SysMLv2::REST::Project> project, boost::uuids::uuid commitId)
 	{
+		std::shared_lock lock(Mutex);
 		const auto it = ProjectIdCommitMap.find(project->getId());
 		if (it == ProjectIdCommitMap.end())
 			return nullptr;
@@ -61,6 +62,15 @@ namespace StructuraSystems::Server
 	}
 
 	std::shared_ptr<SysMLv2::REST::Commit> ProjectVersioningService::createCommit(
+		std::shared_ptr<SysMLv2::REST::DataVersion> change, std::shared_ptr<SysMLv2::REST::Branch> branch,
+		std::vector<std::shared_ptr<SysMLv2::REST::Commit>> previousCommits,
+		std::shared_ptr<SysMLv2::REST::Project> project)
+	{
+		std::unique_lock lock(Mutex);
+		return createCommitUnlocked(change, branch, previousCommits, project);
+	}
+
+	std::shared_ptr<SysMLv2::REST::Commit> ProjectVersioningService::createCommitUnlocked(
 		std::shared_ptr<SysMLv2::REST::DataVersion> change, std::shared_ptr<SysMLv2::REST::Branch> branch,
 		std::vector<std::shared_ptr<SysMLv2::REST::Commit>> previousCommits,
 		std::shared_ptr<SysMLv2::REST::Project> project)
@@ -80,6 +90,7 @@ namespace StructuraSystems::Server
 	std::shared_ptr<SysMLv2::REST::Commit> ProjectVersioningService::createCommit(std::string description,
 		std::vector<std::shared_ptr<SysMLv2::REST::DataVersion>> change, std::shared_ptr<SysMLv2::REST::Project> project,
 		std::shared_ptr<SysMLv2::REST::Branch> branch) {
+		std::unique_lock lock(Mutex);
 		std::vector<std::shared_ptr<SysMLv2::REST::Commit>> previousCommits;
 
 		if (branch->getHead())
@@ -101,6 +112,7 @@ namespace StructuraSystems::Server
 		std::shared_ptr<SysMLv2::REST::DataVersion> change, std::shared_ptr<SysMLv2::REST::Branch> branch,
 		std::shared_ptr<SysMLv2::REST::Project> project)
 	{
+		std::unique_lock lock(Mutex);
 		const auto commit = std::make_shared<SysMLv2::REST::Commit>("", project);
 		commit->addChange(change);
 
@@ -118,6 +130,7 @@ namespace StructuraSystems::Server
 		std::vector<std::shared_ptr<SysMLv2::REST::Commit>> previousCommits,
 		std::shared_ptr<SysMLv2::REST::Project> project)
 	{
+		std::unique_lock lock(Mutex);
 		const auto commit = std::make_shared<SysMLv2::REST::Commit>("", project, previousCommits);
 		commit->addChange(change);
 
@@ -137,6 +150,7 @@ namespace StructuraSystems::Server
 	std::shared_ptr<SysMLv2::REST::Commit> ProjectVersioningService::createCommit(
 		std::shared_ptr<SysMLv2::REST::DataVersion> change, std::shared_ptr<SysMLv2::REST::Project> project)
 	{
+		std::unique_lock lock(Mutex);
 		const auto commit = std::make_shared<SysMLv2::REST::Commit>("", project);
 		commit->addChange(change);
 
@@ -186,6 +200,7 @@ namespace StructuraSystems::Server
 	std::vector<std::shared_ptr<SysMLv2::REST::Branch>> ProjectVersioningService::getBranches(
 		std::shared_ptr<SysMLv2::REST::Project> project)
 	{
+		std::shared_lock lock(Mutex);
 		const auto it = ProjectIdBranchMap.find(project->getId());
 		if (it == ProjectIdBranchMap.end())
 			return {};
@@ -195,6 +210,7 @@ namespace StructuraSystems::Server
 	std::shared_ptr<SysMLv2::REST::Branch> ProjectVersioningService::getBranchById(std::shared_ptr<SysMLv2::REST::Project> project,
 			boost::uuids::uuid &branchId)
 	{
+		std::shared_lock lock(Mutex);
 		const auto it = ProjectIdBranchMap.find(project->getId());
 		if (it == ProjectIdBranchMap.end())
 			return nullptr;
@@ -209,6 +225,7 @@ namespace StructuraSystems::Server
 	std::shared_ptr<SysMLv2::REST::Branch> ProjectVersioningService::getDefaultBranch(
 		std::shared_ptr<SysMLv2::REST::Project> project)
 	{
+		std::shared_lock lock(Mutex);
 		const auto it = ProjectIdBranchMap.find(project->getId());
 		if (it == ProjectIdBranchMap.end() || project->getDefaultBranch() == nullptr)
 			return nullptr;
@@ -222,6 +239,7 @@ namespace StructuraSystems::Server
 	std::shared_ptr<SysMLv2::REST::Project> ProjectVersioningService::setDefaultBranch(std::shared_ptr<SysMLv2::REST::Project> project,
 			boost::uuids::uuid &branchId)
 	{
+		std::unique_lock lock(Mutex);
 		const auto branchesList = ProjectIdBranchMap.at(project->getId());
 
 		for (const auto &branch : branchesList)
@@ -238,6 +256,7 @@ namespace StructuraSystems::Server
 
 	std::shared_ptr<SysMLv2::REST::Branch> ProjectVersioningService::createBranch(std::shared_ptr<SysMLv2::REST::Project> project, std::string branchName, std::shared_ptr<SysMLv2::REST::Commit> head)
 	{
+		std::unique_lock lock(Mutex);
 		const auto newBranch = std::make_shared<SysMLv2::REST::Branch>(branchName);
 		newBranch->setHead(head);
 		DBController->addBranch(project->getId(), newBranch);
@@ -248,6 +267,7 @@ namespace StructuraSystems::Server
 	std::shared_ptr<SysMLv2::REST::Branch> ProjectVersioningService::deleteBranch(std::shared_ptr<SysMLv2::REST::Project> project,
 			boost::uuids::uuid &branchId)
 	{
+		std::unique_lock lock(Mutex);
 		const auto it = ProjectIdBranchMap.find(project->getId());
 		if (it == ProjectIdBranchMap.end())
 			return nullptr;
@@ -269,6 +289,7 @@ namespace StructuraSystems::Server
 
 	std::vector<std::shared_ptr<SysMLv2::REST::Tag>> ProjectVersioningService::getTags(std::shared_ptr<SysMLv2::REST::Project> project)
 	{
+		std::shared_lock lock(Mutex);
 		const auto it = ProjectIdTagMap.find(project->getId());
 		if (it == ProjectIdTagMap.end())
 			return {};
@@ -278,6 +299,7 @@ namespace StructuraSystems::Server
 	std::shared_ptr<SysMLv2::REST::Tag> ProjectVersioningService::getTagById(std::shared_ptr<SysMLv2::REST::Project> project,
 			boost::uuids::uuid &tagId)
 	{
+		std::shared_lock lock(Mutex);
 		const auto it = ProjectIdTagMap.find(project->getId());
 		if (it == ProjectIdTagMap.end())
 			return nullptr;
@@ -298,6 +320,7 @@ namespace StructuraSystems::Server
 	std::shared_ptr<SysMLv2::REST::Tag> ProjectVersioningService::createTag(std::shared_ptr<SysMLv2::REST::Project> project,
 			std::string &tagName, std::shared_ptr<SysMLv2::REST::Commit> taggedCommit)
 	{
+		std::unique_lock lock(Mutex);
 		const auto newTag = std::make_shared<SysMLv2::REST::Tag>(tagName);
 		newTag->setReferencedCommit(taggedCommit);
 		ProjectIdTagMap[project->getId()].push_back(newTag);
@@ -319,13 +342,21 @@ namespace StructuraSystems::Server
 		return std::vector<std::shared_ptr<SysMLv2::REST::DataDifference>>();
 	}
 
+	std::string ProjectVersioningService::serializeBranch(const std::shared_ptr<SysMLv2::REST::Branch>& branch)
+	{
+		// Branch::serializeToJson reads the head, which createCommit replaces under the unique lock.
+		std::shared_lock lock(Mutex);
+		return branch->serializeToJson();
+	}
+
 	void ProjectVersioningService::addBranchFromProject(std::shared_ptr<SysMLv2::REST::Project> project) {
+		std::unique_lock lock(Mutex);
 		ProjectIdBranchMap[project->getId()] = std::vector<std::shared_ptr<SysMLv2::REST::Branch>>();
 		ProjectIdCommitMap[project->getId()] = std::vector<std::shared_ptr<SysMLv2::REST::Commit>>();
 
 		ProjectIdBranchMap[project->getId()].push_back(project->getDefaultBranch());
 		const auto dataVersion = std::make_shared<SysMLv2::REST::DataVersion>(boost::uuids::random_generator()(),std::make_shared<KerML::Entities::TextualRepresentation>("SysML v2","# To be filled by you"));
-		createCommit(dataVersion,project->getDefaultBranch(),{},project);
+		createCommitUnlocked(dataVersion,project->getDefaultBranch(),{},project);
 		DBController->addBranch(project->getId(), project->getDefaultBranch());
 	}
 
