@@ -1,7 +1,10 @@
 #pragma once
 
 #include <sysmlv2/service/implementation/ProjectService.h>
+#include <functional>
 #include <memory>
+#include <optional>
+#include <string>
 #include <shared_mutex>
 #include <vector>
 
@@ -29,6 +32,17 @@ namespace StructuraSystems::Server
 		std::shared_ptr<SysMLv2::REST::Project> updateProject(boost::uuids::uuid projectId, std::string projectName, std::string description, std::shared_ptr<SysMLv2::REST::Branch> branch) override;
 
 		std::shared_ptr<SysMLv2::REST::Project> deleteProject(boost::uuids::uuid projectId) override;
+
+		/// Changes owner and/or owning group (std::nullopt keeps the value) and stores the project.
+		/// Returns nullptr if the project no longer exists.
+		std::shared_ptr<SysMLv2::REST::Project> changeOwnership(boost::uuids::uuid projectId, std::optional<std::string> owner, std::optional<std::string> owningGroup);
+
+		/// Serializes the project under the shared lock, so it cannot race with updateProject.
+		std::string serializeProject(const std::shared_ptr<SysMLv2::REST::Project>& project);
+
+		/// JSON array of all projects for which the filter returns true. Filter and serialization run
+		/// under the shared lock; the filter must not call back into this service.
+		std::string serializeProjects(const std::function<bool(const std::shared_ptr<Project>&)>& filter);
 	private:
 		ServerProjectService();
 

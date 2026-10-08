@@ -9,6 +9,7 @@
 #include <bsoncxx/builder/stream/document.hpp>
 #include <bsoncxx/json.hpp>
 #include <nlohmann/json.hpp>
+#include <cctype>
 #include <vector>
 #include <memory>
 #include <stdexcept>
@@ -536,31 +537,52 @@ namespace StructuraSystems::Server
 	}
 
 
-	DataBaseController* DataBaseController::createInstance(std::string dbAddress, std::string username, std::string password, std::string databaseName)
+	DataBaseController* DataBaseController::createInstance(std::string dbAddress, std::string username, std::string password, std::string databaseName, bool tls)
 	{
 		// std::call_once makes the creation thread safe. If the constructor throws, the flag stays
 		// unset and the next call tries again.
 		static std::once_flag createFlag;
 		std::call_once(createFlag, [&] {
-			Instance.store(new DataBaseController(dbAddress, username, password, databaseName));
+			Instance.store(new DataBaseController(dbAddress, username, password, databaseName, tls));
 		});
 		return Instance.load();
 	}
 
-	mongocxx::uri DataBaseController::buildUri(const std::string& dBAddress, const std::string& username, const std::string& password)
+	std::string DataBaseController::percentEncode(const std::string& value)
 	{
-		std::string uri_string = "";
+		static const char* hex = "0123456789ABCDEF";
+		std::string encoded;
+		for (const unsigned char c : value)
+		{
+			if (std::isalnum(c) || c == '-' || c == '.' || c == '_' || c == '~')
+				encoded += static_cast<char>(c);
+			else
+			{
+				encoded += '%';
+				encoded += hex[c >> 4];
+				encoded += hex[c & 0x0F];
+			}
+		}
+		return encoded;
+	}
 
-		if (username.empty())
-			uri_string += "mongodb://" + dBAddress;
-		else
-			uri_string += "mongodb://" + username + ":" + password + "@" + dBAddress;
+	mongocxx::uri DataBaseController::buildUri(const std::string& dBAddress, const std::string& username, const std::string& password, bool tls)
+	{
+		std::string uri_string = "mongodb://";
+
+		// Without a database in the path the driver authenticates against "admin".
+		if (!username.empty())
+			uri_string += percentEncode(username) + ":" + percentEncode(password) + "@";
+		uri_string += dBAddress;
+
+		if (tls)
+			uri_string += "/?tls=true";
 
 		return mongocxx::uri(uri_string);
 	}
 
-	DataBaseController::DataBaseController(std::string dBAddress, std::string username, std::string password, std::string databaseName)
-		: Inst(), Pool(buildUri(dBAddress, username, password)), DatabaseName(std::move(databaseName))
+	DataBaseController::DataBaseController(std::string dBAddress, std::string username, std::string password, std::string databaseName, bool tls)
+		: Inst(), Pool(buildUri(dBAddress, username, password, tls)), DatabaseName(std::move(databaseName))
 	{
 		auto client = Pool.acquire();
 		auto database = (*client)[DatabaseName];

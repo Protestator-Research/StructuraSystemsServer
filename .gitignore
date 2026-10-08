@@ -54,3 +54,7 @@ build/**
 tests/.venv/
 __pycache__/
 .pytest_cache/
+
+# local configuration and secrets
+.env
+config.local.json

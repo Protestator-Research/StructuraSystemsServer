@@ -86,6 +86,16 @@ Neue optionale Schluessel in `custom_config` (alle Werte positive ganze Zahlen, 
 
 Intern: Die MongoDB-Verbindung nutzt jetzt einen Connection-Pool, die Services sind mit Lese-/Schreibsperren gegen parallele Zugriffe geschuetzt. Das erfordert keine Konfigurationsaenderung.
 
+## Phase 4: CORS, Deployment und Konfiguration
+
+Siehe [DEPLOYMENT.md](DEPLOYMENT.md).
+
+- **CORS braucht `allowed_origins`.** Der Server spiegelt `Origin` nur noch zurueck, wenn er exakt in `allowed_origins` steht (auch in Debug-Builds), und sendet immer `Vary: Origin`. Fuer andere Origins gibt es keine CORS-Header. Wer bisher ohne Eintrag arbeitete (Debug: jede Origin erlaubt), muss die Web-Origin eintragen, sonst blockiert der Browser die Anfragen. Der alte Schluessel `allowed_origin` (String) wird weiter gelesen.
+- **`config.json`** lauscht jetzt auf `127.0.0.1:8088` (statt `0.0.0.0`), loggt mit `INFO` und enthaelt keine MongoDB-Zugangsdaten mehr. Diese kommen aus `MONGO_USERNAME` und `MONGO_PASSWORD` oder aus einer eigenen Konfigurationsdatei (`STRUCTURA_CONFIG`). Der Server muss hinter einem Reverse Proxy laufen, der TLS terminiert.
+- **`GET /version` braucht ein gueltiges Token** (401 ohne).
+- Neu: `mongo_tls` / `MONGO_TLS=true`. Benutzer und Passwort der MongoDB werden Percent-kodiert.
+- `docker-compose.yaml` liest Zugangsdaten aus einer `.env` (Vorlage `.env.example`), bindet Ports an `127.0.0.1` und startet mongo-express nur mit `--profile dev`.
+
 ## Schutz vor Datenverlust
 
 Fehlt die Collection `versions`, obwohl andere Collections existieren, loescht der Server die Datenbank nicht mehr. Er bricht den Start mit einer Fehlermeldung ab. Nur in Debug-Builds und nur, wenn alle vorhandenen Collections leer sind, wird neu initialisiert.

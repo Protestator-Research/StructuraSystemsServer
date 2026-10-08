@@ -37,7 +37,7 @@ namespace StructuraSystems::Server
 	{
 	public:
 		DataBaseController() = delete;
-		static DataBaseController* createInstance(std::string dbAddress, std::string username, std::string password, std::string databaseName);
+		static DataBaseController* createInstance(std::string dbAddress, std::string username, std::string password, std::string databaseName, bool tls = false);
 		static DataBaseController* getInstance();
 
 
@@ -79,11 +79,14 @@ namespace StructuraSystems::Server
 		void changeUser(const User& user);
 
 	private:
-		DataBaseController(std::string dBAddress, std::string username, std::string password, std::string databaseName);
+		DataBaseController(std::string dBAddress, std::string username, std::string password, std::string databaseName, bool tls);
 
 		void addVersionToDatabase();
  
-		static mongocxx::uri buildUri(const std::string& dBAddress, const std::string& username, const std::string& password);
+		static mongocxx::uri buildUri(const std::string& dBAddress, const std::string& username, const std::string& password, bool tls = false);
+
+		/// Percent-encodes everything except the RFC 3986 unreserved characters.
+		static std::string percentEncode(const std::string& value);
 
 		static std::atomic<DataBaseController*> Instance;
 

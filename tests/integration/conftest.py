@@ -6,6 +6,7 @@ import time
 import uuid
 from contextlib import contextmanager
 from pathlib import Path
+from urllib.parse import quote
 
 import pytest
 import requests
@@ -17,14 +18,33 @@ SERVER_BINARY = Path(os.environ.get(
     "STRUCTURA_SERVER_BINARY",
     str(REPO_ROOT / "build" / "Debug" / "debug" / "StructuraSystemsServer"),
 ))
-CONAN_RUN_ENV = REPO_ROOT / "build" / "Debug" / "generators" / "conanrun.sh"
+
+
+def find_conan_run_env():
+    """STRUCTURA_CONAN_RUN_ENV wins; otherwise conanrun.sh next to the binary's build folder, then the Debug build."""
+    override = os.environ.get("STRUCTURA_CONAN_RUN_ENV")
+    if override:
+        return Path(override)
+    for candidate in (
+        SERVER_BINARY.parent.parent / "generators" / "conanrun.sh",
+        REPO_ROOT / "build" / "Debug" / "generators" / "conanrun.sh",
+    ):
+        if candidate.exists():
+            return candidate
+    return None
+
+
+CONAN_RUN_ENV = find_conan_run_env()
 TEST_DB = "structura_systems_test"
 TEST_PORT = 18088
 ADMIN_PASSWORD = "TestAdmin123!"
 USER_PASSWORD = "Password1234!"
+# Credentials of the Mongo instance used by the tests, also handed to the server under test.
+MONGO_USER = os.environ.get("TEST_MONGO_USER", "root")
+MONGO_PASSWORD = os.environ.get("TEST_MONGO_PASSWORD", "root-password")
 MONGO_URI = os.environ.get(
     "TEST_MONGO_URI",
-    "mongodb://root:root-password@localhost:27017/?authSource=admin",
+    f"mongodb://{quote(MONGO_USER, safe='')}:{quote(MONGO_PASSWORD, safe='')}@localhost:27017/?authSource=admin",
 )
 
 
@@ -64,7 +84,7 @@ def wait_for_ready(proc, base_url, dump_output, timeout=60):
 
 def server_command():
     # The Conan run environment provides the shared library search path.
-    if CONAN_RUN_ENV.exists():
+    if CONAN_RUN_ENV is not None:
         return ["bash", "-c", 'source "$1" && exec "$2"', "bash",
                 str(CONAN_RUN_ENV), str(SERVER_BINARY)]
     return [str(SERVER_BINARY)]
@@ -89,8 +109,8 @@ def start_server(db_name, port, extra_env=None, drop_db=True, expect_ready=True,
         "listeners": [{"address": "127.0.0.1", "port": port, "https": False}],
         "custom_config": {
             "mongo_address": "localhost:27017",
-            "mongo_username": "root",
-            "mongo_password": "root-password",
+            "mongo_username": MONGO_USER,
+            "mongo_password": MONGO_PASSWORD,
             "mongo_database": db_name,
             "allowed_origins": [],
         },
@@ -109,7 +129,7 @@ def start_server(db_name, port, extra_env=None, drop_db=True, expect_ready=True,
     env = dict(os.environ)
     env["STRUCTURA_CONFIG"] = str(config_path)
     env["STRUCTURA_ADMIN_PASSWORD"] = ADMIN_PASSWORD
-    for name in ("MONGO_ADDRESS", "MONGO_USERNAME", "MONGO_PASSWORD", "MONGO_DATABASE"):
+    for name in ("MONGO_ADDRESS", "MONGO_USERNAME", "MONGO_PASSWORD", "MONGO_DATABASE", "MONGO_TLS"):
         env.pop(name, None)
     env.update(extra_env or {})
     # A value of None removes the variable from the environment.

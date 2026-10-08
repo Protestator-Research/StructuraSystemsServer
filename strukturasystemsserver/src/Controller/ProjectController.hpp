@@ -35,25 +35,9 @@ namespace StructuraSystems::Server
 				return;
 			}
 
-			const auto& projects = _ProjectService->getProjects();
-
-			std::vector<std::shared_ptr<SysMLv2::REST::Project>> userAllowedProjects;
-			for (const auto& project : projects)
-			{
-				const auto db_project = std::dynamic_pointer_cast<StructuraSystems::Server::Project>(project);
-
-				if (canAccessProject(*user, db_project, ProjectAccess::Read))
-					userAllowedProjects.push_back(project);
-			}
-
-			std::string returnValue = "[\r\n";
-			for (size_t i = 0; i < userAllowedProjects.size(); i++)
-			{
-				returnValue += userAllowedProjects[i]->serializeToJson();
-				if (i < (userAllowedProjects.size() - 1))
-					returnValue += ",\r\n";
-			}
-			returnValue += "]";
+			const auto returnValue = _ProjectService->serializeProjects([&user](const std::shared_ptr<Project>& project) {
+				return canAccessProject(*user, project, ProjectAccess::Read);
+			});
 
 			const auto response = drogon::HttpResponse::newHttpResponse(drogon::k200OK, drogon::CT_APPLICATION_JSON);
 			response->setBody(returnValue);
@@ -66,7 +50,7 @@ namespace StructuraSystems::Server
 				return;
 
 			const auto response = drogon::HttpResponse::newHttpResponse(drogon::k200OK, drogon::CT_APPLICATION_JSON);
-			response->setBody(project->serializeToJson());
+			response->setBody(_ProjectService->serializeProject(project));
 			callback(response);
 		}
 
@@ -163,12 +147,12 @@ namespace StructuraSystems::Server
 				return;
 			}
 
-			std::string newOwner = project->getOwner();
-			std::string newGroup = project->getOwningGroup();
+			std::optional<std::string> newOwner;
+			std::optional<std::string> newGroup;
 			if (hasOwner)
 			{
 				newOwner = requestObject["owner"].asString();
-				if (!AuthenticationService::getInstance()->findUser(newOwner))
+				if (!AuthenticationService::getInstance()->findUser(*newOwner))
 				{
 					callback(jsonError(drogon::k400BadRequest, "The new owner does not exist."));
 					return;
@@ -177,19 +161,22 @@ namespace StructuraSystems::Server
 			if (hasGroup)
 			{
 				newGroup = requestObject["owningGroup"].asString();
-				if (!mayUseGroup(user, newGroup))
+				if (!mayUseGroup(user, *newGroup))
 				{
 					callback(jsonError(drogon::k403Forbidden, "You are not a member of the owning group."));
 					return;
 				}
 			}
 
-			project->setOwner(newOwner);
-			project->setOwningGroup(newGroup);
-			DataBaseController::getInstance()->updateProject(project);
+			const auto changed = _ProjectService->changeOwnership(project->getId(), newOwner, newGroup);
+			if (changed == nullptr)
+			{
+				callback(jsonError(drogon::k404NotFound, "Project not found."));
+				return;
+			}
 
 			const auto response = drogon::HttpResponse::newHttpResponse(drogon::k200OK, drogon::CT_APPLICATION_JSON);
-			response->setBody(project->serializeToJson());
+			response->setBody(_ProjectService->serializeProject(changed));
 			callback(response);
 		}
 

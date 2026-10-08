@@ -89,6 +89,43 @@ namespace StructuraSystems::Server
 		return deletedProject;
 	}
 
+	std::shared_ptr<SysMLv2::REST::Project> ServerProjectService::changeOwnership(boost::uuids::uuid projectId,
+		std::optional<std::string> owner, std::optional<std::string> owningGroup)
+	{
+		std::unique_lock lock(Mutex);
+		const auto found = ProjectMap.find(projectId);
+		if (found == ProjectMap.end())
+			return nullptr;
+
+		const auto project = std::dynamic_pointer_cast<Project>(found->second);
+		project->setOwnership(owner.value_or(project->getOwner()), owningGroup.value_or(project->getOwningGroup()));
+		DBController->updateProject(project);
+		return project;
+	}
+
+	std::string ServerProjectService::serializeProject(const std::shared_ptr<SysMLv2::REST::Project>& project)
+	{
+		std::shared_lock lock(Mutex);
+		return project->serializeToJson();
+	}
+
+	std::string ServerProjectService::serializeProjects(const std::function<bool(const std::shared_ptr<Project>&)>& filter)
+	{
+		std::shared_lock lock(Mutex);
+		std::string result = "[\r\n";
+		bool first = true;
+		for (const auto& entry : ProjectService::getProjects())
+		{
+			if (!filter(std::dynamic_pointer_cast<Project>(entry)))
+				continue;
+			if (!first)
+				result += ",\r\n";
+			result += entry->serializeToJson();
+			first = false;
+		}
+		result += "]";
+		return result;
+	}
 
 	ServerProjectService::ServerProjectService() : ProjectService()
 	{

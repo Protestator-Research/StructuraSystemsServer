@@ -15,7 +15,6 @@
 #include "Services/LoginThrottle.h"
 #include "Services/ServerConfig.h"
 #include "Filter/JwtFilter.hpp"
-#include "Filter/CorsFilter.hpp"
 
 #include <drogon/drogon.h>
 #include <sodium.h>
@@ -25,6 +24,7 @@
 #include <cstdlib>
 #include <iostream>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 #define SCHEME "http"
@@ -51,6 +51,10 @@ namespace {
         if (config[key].isIntegral() && config[key].asInt64() > 0)
             return config[key].asInt64();
         return defaultValue;
+    }
+
+    bool readConfigBool(const Json::Value& config, const char* key, bool defaultValue) {
+        return config[key].isBool() ? config[key].asBool() : defaultValue;
     }
 
     std::vector<std::string> readConfigStringArray(const Json::Value& config, const char* key, std::vector<std::string> defaultValue) {
@@ -101,29 +105,29 @@ int main() {
     loginLimits.FailureWindow = std::chrono::seconds(readConfigPositiveInt(customConfig, "login_failure_window_seconds", loginLimits.FailureWindow.count()));
     loginLimits.MaxRequestsPerIp = static_cast<std::size_t>(readConfigPositiveInt(customConfig, "login_max_requests_per_ip", static_cast<int64_t>(loginLimits.MaxRequestsPerIp)));
     loginLimits.IpWindow = std::chrono::seconds(readConfigPositiveInt(customConfig, "login_ip_window_seconds", loginLimits.IpWindow.count()));
-    [[maybe_unused]] const auto allowedOrigins = readConfigStringArray(customConfig, "allowed_origins", {});
+    auto allowedOriginList = readConfigStringArray(customConfig, "allowed_origins", {});
+    // Legacy single-string key of older configs.
+    if (const auto legacyOrigin = readConfigString(customConfig, "allowed_origin", ""); !legacyOrigin.empty())
+        allowedOriginList.push_back(legacyOrigin);
+    const std::unordered_set<std::string> allowedOrigins(allowedOriginList.begin(), allowedOriginList.end());
+    const bool mongoTls = readConfigBool(customConfig, "mongo_tls", false) || readEnv("MONGO_TLS") == "true";
 
     try {
-        StructuraSystems::Server::DataBaseController::createInstance(dbAddressArg, dbUsernameArg, dbPasswordArg, dbDatabaseArg);
+        StructuraSystems::Server::DataBaseController::createInstance(dbAddressArg, dbUsernameArg, dbPasswordArg, dbDatabaseArg, mongoTls);
     } catch (const std::exception& e) {
         std::cerr << "Database startup failed: " << e.what() << std::endl;
         return 1;
     }
     [[maybe_unused]] auto jwtFilter = StructuraSystems::Server::JwtFilter();
 
-    const auto& allowed_origin = customConfig["allowed_origin"].asString();
+    std::function<void(const drogon::HttpRequestPtr&,const drogon::HttpResponsePtr&)> addHeader = [allowedOrigins](const drogon::HttpRequestPtr& req,const drogon::HttpResponsePtr& resp)-> void {
+        // Only exact matches of the allow list are reflected, in every build type. Unknown origins get no CORS headers.
+        resp->addHeader("Vary", "Origin");
+        const auto& origin = req->getHeader("Origin");
+        if (origin.empty() || allowedOrigins.find(origin) == allowedOrigins.end())
+            return;
 
-    std::function<void(const drogon::HttpRequestPtr&,const drogon::HttpResponsePtr&)> addHeader = [allowed_origin](const drogon::HttpRequestPtr& req,const drogon::HttpResponsePtr& resp)-> void {
-        const auto origin = req->getHeader("Origin");
-
-#ifndef NDEBUG
-        if (!origin.empty()) {
-            resp->addHeader("Access-Control-Allow-Origin", origin);
-            resp->addHeader("Vary", "Origin");
-        }
-#else
-        resp->addHeader("Access-Control-Allow-Origin", allowed_origin);
-#endif
+        resp->addHeader("Access-Control-Allow-Origin", origin);
         resp->addHeader("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
         resp->addHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
         resp->addHeader("Access-Control-Max-Age", "86400");

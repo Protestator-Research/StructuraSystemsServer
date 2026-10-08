@@ -55,7 +55,6 @@ set(SOURCES
         src/Services/DigitalTwinService.h
         src/Filter/JwtFilter.hpp
         src/Entities/db/User.hpp
-        src/Filter/CorsFilter.hpp
         src/Entities/json/UserRequest.cpp
         src/Entities/json/UserRequest.h
         src/Entities/json/UserResponse.cpp
