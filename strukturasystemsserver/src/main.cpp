@@ -16,37 +16,75 @@
 #include "Filter/CorsFilter.hpp"
 
 #include <drogon/drogon.h>
+#include <sodium.h>
+
+#include <cstdlib>
+#include <iostream>
+#include <string>
+#include <vector>
 
 #define SCHEME "http"
 #define HOST "127.0.0.1"
 #define PORT 8088
 
+namespace {
+    std::string readEnv(const char* name) {
+        const char* value = std::getenv(name);
+        return value ? std::string(value) : std::string();
+    }
+
+    std::string readConfigString(const Json::Value& config, const char* key, std::string defaultValue) {
+        if (config[key].isString()) {
+            std::string value = config[key].asString();
+            if (!value.empty())
+                return value;
+        }
+        return defaultValue;
+    }
+
+    std::vector<std::string> readConfigStringArray(const Json::Value& config, const char* key, std::vector<std::string> defaultValue) {
+        if (!config[key].isArray())
+            return defaultValue;
+        std::vector<std::string> result;
+        for (const auto& entry : config[key]) {
+            if (entry.isString())
+                result.push_back(entry.asString());
+        }
+        return result;
+    }
+}
+
 int main() {
-    drogon::app().loadConfigFile("config.json");
+    if (sodium_init() < 0) {
+        std::cerr << "Failed to initialize libsodium" << std::endl;
+        return 1;
+    }
+
+    std::string configPath = readEnv("STRUCTURA_CONFIG");
+    if (configPath.empty())
+        configPath = "config.json";
+
+    drogon::app().loadConfigFile(configPath);
     const auto customConfig = drogon::app().getCustomConfig();
 
-    std::string dbAddressArg = "localhost:27017";
-    if (customConfig["mongo_address"].isString()) {
-        std::string dbAddress = customConfig["mongo_address"].asString();
-        if (!dbAddress.empty())
-            dbAddressArg = dbAddress;
-    }
+    std::string dbAddressArg = readConfigString(customConfig, "mongo_address", "localhost:27017");
+    std::string dbUsernameArg = readConfigString(customConfig, "mongo_username", "");
+    std::string dbPasswordArg = readConfigString(customConfig, "mongo_password", "");
+    std::string dbDatabaseArg = readConfigString(customConfig, "mongo_database", "structura_systems");
 
-    std::string dbUsernameArg = "";
-    if (customConfig["mongo_username"].isString()) {
-        std::string dbUsername = customConfig["mongo_username"].asString();
-        if (!dbUsername.empty())
-            dbUsernameArg = dbUsername;
-    }
+    if (const auto value = readEnv("MONGO_ADDRESS"); !value.empty())
+        dbAddressArg = value;
+    if (const auto value = readEnv("MONGO_USERNAME"); !value.empty())
+        dbUsernameArg = value;
+    if (const auto value = readEnv("MONGO_PASSWORD"); !value.empty())
+        dbPasswordArg = value;
+    if (const auto value = readEnv("MONGO_DATABASE"); !value.empty())
+        dbDatabaseArg = value;
 
-    std::string dbPasswordArg = "";
-    if (customConfig["mongo_password"].isString()) {
-        std::string dbPassword = customConfig["mongo_password"].asString();
-        if (!dbPassword.empty())
-            dbPasswordArg = dbPassword;
-    }
+    [[maybe_unused]] const auto trustedProxies = readConfigStringArray(customConfig, "trusted_proxies", {"127.0.0.1"});
+    [[maybe_unused]] const auto allowedOrigins = readConfigStringArray(customConfig, "allowed_origins", {});
 
-    [[maybe_unused]] auto dbController = StructuraSystems::Server::DataBaseController::createInstance(dbAddressArg, dbUsernameArg, dbPasswordArg);
+    [[maybe_unused]] auto dbController = StructuraSystems::Server::DataBaseController::createInstance(dbAddressArg, dbUsernameArg, dbPasswordArg, dbDatabaseArg);
     [[maybe_unused]] auto jwtFilter = StructuraSystems::Server::JwtFilter();
     [[maybe_unused]] auto adminFilter = StructuraSystems::Server::AdministrationFilter();
 

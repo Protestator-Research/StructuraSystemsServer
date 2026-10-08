@@ -464,16 +464,16 @@ namespace StructuraSystems::Server
 	}
 
 
-	DataBaseController* DataBaseController::createInstance(std::string dbAddress, std::string username, std::string password)
+	DataBaseController* DataBaseController::createInstance(std::string dbAddress, std::string username, std::string password, std::string databaseName)
 	{
 		if (Instance)
 			return Instance;
 
-		Instance = new DataBaseController(dbAddress, username, password);
+		Instance = new DataBaseController(dbAddress, username, password, databaseName);
 		return Instance;
 	}
 
-	DataBaseController::DataBaseController(std::string dBAddress, std::string username, std::string password)
+	DataBaseController::DataBaseController(std::string dBAddress, std::string username, std::string password, std::string databaseName)
 	{
 		std::string uri_string = "";
 
@@ -485,7 +485,7 @@ namespace StructuraSystems::Server
 		uri = mongocxx::uri(uri_string);
 		client = mongocxx::client(uri);
 
-		database = client["structura_systems"];
+		database = client[databaseName];
 
 // #ifndef NDEBUG
 		// deleteDatabaseIfDebug();

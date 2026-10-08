@@ -35,7 +35,7 @@ namespace StructuraSystems::Server
 	{
 	public:
 		DataBaseController() = delete;
-		static DataBaseController* createInstance(std::string dbAddress, std::string username, std::string password);
+		static DataBaseController* createInstance(std::string dbAddress, std::string username, std::string password, std::string databaseName);
 		static DataBaseController* getInstance();
 
 
@@ -77,7 +77,7 @@ namespace StructuraSystems::Server
 		void changeUser(const User& user);
 
 	private:
-		DataBaseController(std::string dBAddress, std::string username, std::string password);
+		DataBaseController(std::string dBAddress, std::string username, std::string password, std::string databaseName);
 
 		void addVersionToDatabase();
  
