@@ -18,6 +18,13 @@ namespace StructuraSystems::Server
 		DefaultBranchDeletionException() : std::runtime_error("The default branch of a project cannot be deleted.") {}
 	};
 
+	/// Thrown when a branch with the same name already exists within the project.
+	class BranchAlreadyExistsException : public std::runtime_error
+	{
+	public:
+		BranchAlreadyExistsException() : std::runtime_error("A branch with this name already exists.") {}
+	};
+
 	class ProjectVersioningService : public SysMLv2::API::IProjectVersioningService
 	{
 	public:

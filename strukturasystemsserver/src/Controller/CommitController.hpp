@@ -70,6 +70,23 @@ namespace StructuraSystems::Server
 				return;
 			}
 
+			// The sysmllib CommitRequest silently swallows deserialization errors and yields DataVersions
+			// without payload (e.g. for @types its deserializer does not know), so the structure is checked first.
+			if (!jsonObject->isObject() || !(*jsonObject)["change"].isArray())
+			{
+				callback(jsonError(drogon::k400BadRequest, "Invalid commit request."));
+				return;
+			}
+			const auto& requestedChanges = (*jsonObject)["change"];
+			for (const auto& change : requestedChanges)
+			{
+				if (!change.isObject() || !change["payload"].isObject() || !change["payload"]["@type"].isString())
+				{
+					callback(jsonError(drogon::k400BadRequest, "Invalid commit change."));
+					return;
+				}
+			}
+
 			std::shared_ptr<SysMLv2::REST::CommitRequest> commitRequest;
 			std::string commitDescription;
 			std::vector<std::shared_ptr<SysMLv2::REST::DataVersion>> commitChanges;
@@ -81,6 +98,20 @@ namespace StructuraSystems::Server
 			catch (...) {
 				callback(jsonError(drogon::k400BadRequest, "Invalid commit request."));
 				return;
+			}
+
+			if (commitChanges.size() != requestedChanges.size())
+			{
+				callback(jsonError(drogon::k400BadRequest, "Invalid commit change."));
+				return;
+			}
+			for (const auto& change : commitChanges)
+			{
+				if (change == nullptr || change->getPayload() == nullptr)
+				{
+					callback(jsonError(drogon::k400BadRequest, "Invalid commit change."));
+					return;
+				}
 			}
 
 			auto branch = ProjectVerService->getDefaultBranch(project);
@@ -99,7 +130,14 @@ namespace StructuraSystems::Server
 					if (_branch->getName()==branchName)
 						branch = _branch;
 			}
-			const auto commit = ProjectVerService->createCommit(commitDescription, commitChanges, project, branch);
+			std::shared_ptr<SysMLv2::REST::Commit> commit;
+			try {
+				commit = ProjectVerService->createCommit(commitDescription, commitChanges, project, branch);
+			}
+			catch (const std::invalid_argument&) {
+				callback(jsonError(drogon::k400BadRequest, "Invalid commit change."));
+				return;
+			}
 
 			const auto response = drogon::HttpResponse::newHttpResponse(drogon::k200OK, drogon::CT_APPLICATION_JSON);
 			response->setBody(commit->serializeToJson());
@@ -287,7 +325,33 @@ namespace StructuraSystems::Server
 				callback(jsonError(drogon::k400BadRequest, "Invalid branch request."));
 				return;
 			}
-			const auto& branch = ProjectVerService->createBranch(project, branchName, branchHead);
+			if (branchName.empty())
+			{
+				callback(jsonError(drogon::k400BadRequest, "Branch name must not be empty."));
+				return;
+			}
+			if (branchHead == nullptr)
+			{
+				callback(jsonError(drogon::k400BadRequest, "Branch head commit is required."));
+				return;
+			}
+
+			// The request only carries a stub with the id; resolve the real commit of this project.
+			const auto realHead = ProjectVerService->getCommitById(project, branchHead->getId());
+			if (realHead == nullptr)
+			{
+				callback(jsonError(drogon::k404NotFound, "Head commit not found."));
+				return;
+			}
+
+			std::shared_ptr<SysMLv2::REST::Branch> branch;
+			try {
+				branch = ProjectVerService->createBranch(project, branchName, realHead);
+			}
+			catch (const BranchAlreadyExistsException& exception) {
+				callback(jsonError(drogon::k409Conflict, exception.what()));
+				return;
+			}
 
 			const auto response = drogon::HttpResponse::newHttpResponse(drogon::k200OK, drogon::CT_APPLICATION_JSON);
 			response->setBody(ProjectVerService->serializeBranch(branch));

@@ -12,6 +12,7 @@
 
 #include <algorithm>
 #include <mutex>
+#include <stdexcept>
 #include <shared_mutex>
 
 #include "../Controller/CommitController.hpp"
@@ -19,6 +20,17 @@
 
 namespace StructuraSystems::Server
 {
+	namespace
+	{
+		/// Commits are serialized (DataVersion::serializeToJson dereferences the payload), so a change
+		/// without payload would crash the process. Throws std::invalid_argument instead.
+		void requireValidChange(const std::shared_ptr<SysMLv2::REST::DataVersion>& change)
+		{
+			if (change == nullptr || change->getPayload() == nullptr)
+				throw std::invalid_argument("Commit change without payload.");
+		}
+	}
+
 
 	std::shared_ptr<ProjectVersioningService> ProjectVersioningService::getInstance()
 	{
@@ -66,6 +78,7 @@ namespace StructuraSystems::Server
 		std::vector<std::shared_ptr<SysMLv2::REST::Commit>> previousCommits,
 		std::shared_ptr<SysMLv2::REST::Project> project)
 	{
+		requireValidChange(change);
 		std::unique_lock lock(Mutex);
 		return createCommitUnlocked(change, branch, previousCommits, project);
 	}
@@ -75,6 +88,7 @@ namespace StructuraSystems::Server
 		std::vector<std::shared_ptr<SysMLv2::REST::Commit>> previousCommits,
 		std::shared_ptr<SysMLv2::REST::Project> project)
 	{
+		requireValidChange(change);
 		const auto commit = std::make_shared<SysMLv2::REST::Commit>("", project, previousCommits);
 		commit->addChange(change);
 
@@ -90,6 +104,8 @@ namespace StructuraSystems::Server
 	std::shared_ptr<SysMLv2::REST::Commit> ProjectVersioningService::createCommit(std::string description,
 		std::vector<std::shared_ptr<SysMLv2::REST::DataVersion>> change, std::shared_ptr<SysMLv2::REST::Project> project,
 		std::shared_ptr<SysMLv2::REST::Branch> branch) {
+		for (const auto& dataVersion : change)
+			requireValidChange(dataVersion);
 		std::unique_lock lock(Mutex);
 		std::vector<std::shared_ptr<SysMLv2::REST::Commit>> previousCommits;
 
@@ -112,6 +128,7 @@ namespace StructuraSystems::Server
 		std::shared_ptr<SysMLv2::REST::DataVersion> change, std::shared_ptr<SysMLv2::REST::Branch> branch,
 		std::shared_ptr<SysMLv2::REST::Project> project)
 	{
+		requireValidChange(change);
 		std::unique_lock lock(Mutex);
 		const auto commit = std::make_shared<SysMLv2::REST::Commit>("", project);
 		commit->addChange(change);
@@ -130,6 +147,7 @@ namespace StructuraSystems::Server
 		std::vector<std::shared_ptr<SysMLv2::REST::Commit>> previousCommits,
 		std::shared_ptr<SysMLv2::REST::Project> project)
 	{
+		requireValidChange(change);
 		std::unique_lock lock(Mutex);
 		const auto commit = std::make_shared<SysMLv2::REST::Commit>("", project, previousCommits);
 		commit->addChange(change);
@@ -150,6 +168,7 @@ namespace StructuraSystems::Server
 	std::shared_ptr<SysMLv2::REST::Commit> ProjectVersioningService::createCommit(
 		std::shared_ptr<SysMLv2::REST::DataVersion> change, std::shared_ptr<SysMLv2::REST::Project> project)
 	{
+		requireValidChange(change);
 		std::unique_lock lock(Mutex);
 		const auto commit = std::make_shared<SysMLv2::REST::Commit>("", project);
 		commit->addChange(change);
@@ -256,7 +275,20 @@ namespace StructuraSystems::Server
 
 	std::shared_ptr<SysMLv2::REST::Branch> ProjectVersioningService::createBranch(std::shared_ptr<SysMLv2::REST::Project> project, std::string branchName, std::shared_ptr<SysMLv2::REST::Commit> head)
 	{
+		if (head == nullptr)
+			throw std::invalid_argument("A branch requires a head commit.");
+
 		std::unique_lock lock(Mutex);
+		// Duplicate check and creation happen under the same lock, so concurrent requests cannot both succeed.
+		const auto existing = ProjectIdBranchMap.find(project->getId());
+		if (existing != ProjectIdBranchMap.end())
+		{
+			for (const auto& candidate : existing->second)
+			{
+				if (candidate->getName() == branchName)
+					throw BranchAlreadyExistsException();
+			}
+		}
 		const auto newBranch = std::make_shared<SysMLv2::REST::Branch>(branchName);
 		newBranch->setHead(head);
 		DBController->addBranch(project->getId(), newBranch);

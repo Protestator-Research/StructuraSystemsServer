@@ -235,6 +235,12 @@ namespace StructuraSystems::Server
 
 	void DataBaseController::addCommit(std::shared_ptr<SysMLv2::REST::Commit> commit)
 	{
+		if (commit == nullptr)
+			throw std::invalid_argument("Commit is null.");
+		for (const auto& dataVersion : commit->getDataVersion())
+			if (dataVersion == nullptr || dataVersion->getPayload() == nullptr)
+				throw std::invalid_argument("Commit change without payload.");
+
 		auto client = Pool.acquire();
 		auto database = (*client)[DatabaseName];
 		std::string commitJsonString = commit->serializeToJson();
