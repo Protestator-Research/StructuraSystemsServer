@@ -208,7 +208,7 @@ namespace StructuraSystems::Server
 		std::shared_ptr<SysMLv2::REST::Project>, std::shared_ptr<SysMLv2::REST::Commit> commit,
 		boost::uuids::uuid& changeId)
 	{
-		for (const auto& change : commit->getDataVersion())
+		for (const auto& change : commit->getChange())
 		{
 			if (change->getId() == changeId)
 				return change;
@@ -353,8 +353,7 @@ namespace StructuraSystems::Server
 			std::string &tagName, std::shared_ptr<SysMLv2::REST::Commit> taggedCommit)
 	{
 		std::unique_lock lock(Mutex);
-		const auto newTag = std::make_shared<SysMLv2::REST::Tag>(tagName);
-		newTag->setReferencedCommit(taggedCommit);
+		const auto newTag = std::make_shared<SysMLv2::REST::Tag>(tagName,project,taggedCommit);
 		ProjectIdTagMap[project->getId()].push_back(newTag);
 		DBController->addTag(project->getId(), newTag);
 		return newTag;

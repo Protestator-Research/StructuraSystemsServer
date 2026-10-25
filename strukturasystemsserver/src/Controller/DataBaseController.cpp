@@ -237,7 +237,7 @@ namespace StructuraSystems::Server
 	{
 		if (commit == nullptr)
 			throw std::invalid_argument("Commit is null.");
-		for (const auto& dataVersion : commit->getDataVersion())
+		for (const auto& dataVersion : commit->getChange())
 			if (dataVersion == nullptr || dataVersion->getPayload() == nullptr)
 				throw std::invalid_argument("Commit change without payload.");
 
@@ -750,9 +750,9 @@ namespace StructuraSystems::Server
 			commit->addChange(change);
 			commitProjectMap.insert(std::make_pair(project->getId(), std::vector<std::shared_ptr<SysMLv2::REST::Commit>>{ commit }));
 			project->getDefaultBranch()->setHead(commit);
-			project->getDefaultBranch()->setReferencedCommit(commit);
+			// project->getDefaultBranch()->setReferencedCommit(commit); TODO Final Remove after testing.
 			commitIdElementsMap.insert(std::make_pair(commit->getId(), payload));
-			commitIdDataVersionMap.insert(std::make_pair(commit->getId(), commit->getDataVersion()[0]));
+			commitIdDataVersionMap.insert(std::make_pair(commit->getId(), commit->getChange()[0]));
 		}
 
 		addMultibleBranches(projectBranchMap);

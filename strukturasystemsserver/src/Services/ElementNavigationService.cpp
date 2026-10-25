@@ -20,7 +20,7 @@ namespace StructuraSystems::Server
 	std::vector<std::shared_ptr<KerML::Entities::Element>> ElementNavigationService::getElements(std::shared_ptr<SysMLv2::REST::Project> , std::shared_ptr<SysMLv2::REST::Commit> commit)
 	{
 		std::vector<std::shared_ptr<KerML::Entities::Element>> elements;
-		for (const auto& version : commit->getDataVersion()) {
+		for (const auto& version : commit->getChange()) {
 			const auto &payload = version->getPayload();
 			if (std::dynamic_pointer_cast<KerML::Entities::Element>(payload).use_count() > 0) {
 				elements.push_back(std::dynamic_pointer_cast<KerML::Entities::Element>(payload));
@@ -30,7 +30,7 @@ namespace StructuraSystems::Server
 	}
 
 	std::shared_ptr<KerML::Entities::Element> ElementNavigationService::getElementById(std::shared_ptr<SysMLv2::REST::Project>, std::shared_ptr<SysMLv2::REST::Commit> commit, boost::uuids::uuid elementId){
-		for (const auto& version : commit->getDataVersion()) {
+		for (const auto& version : commit->getChange()) {
 			const auto &payload = version->getPayload();
 			if ((std::dynamic_pointer_cast<KerML::Entities::Element>(payload).use_count() > 0)&&(payload->getId()==elementId)) {
 				return std::dynamic_pointer_cast<KerML::Entities::Element>(payload);
