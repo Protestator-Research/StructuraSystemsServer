@@ -37,7 +37,7 @@ def commit_id(base_url, headers, project):
         ],
     }
     response = requests.post(f"{base_url}/projects/{project['@id']}/commits", json=body, headers=headers, timeout=10)
-    assert response.status_code == 200, response.text
+    assert response.status_code == 201, response.text
     return response.json()["@id"]
 
 
@@ -48,13 +48,13 @@ def post_branch(base_url, headers, project_id, body):
 def test_create_branch_returns_branch(base_url, headers, project, commit_id):
     name = f"b_{uuid.uuid4().hex[:6]}"
     response = post_branch(base_url, headers, project["@id"], {"@type": "Branch", "name": name, "head": {"@id": commit_id}})
-    assert response.status_code == 200, response.text
+    assert response.status_code == 201, response.text
     assert response.json()["name"] == name
 
 
 def test_duplicate_branch_name_returns_409(base_url, headers, project, commit_id):
     body = {"@type": "Branch", "name": "dup", "head": {"@id": commit_id}}
-    assert post_branch(base_url, headers, project["@id"], body).status_code == 200
+    assert post_branch(base_url, headers, project["@id"], body).status_code == 201
     response = post_branch(base_url, headers, project["@id"], body)
     assert response.status_code == 409, response.text
 

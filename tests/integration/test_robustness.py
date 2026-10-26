@@ -129,7 +129,6 @@ def test_tags_and_missing_entries_do_not_crash(base_url, headers, project):
 @pytest.mark.parametrize(
     "change",
     [
-        {"@type": "DataVersion", "payload": {"@type": "Package", "@id": str(uuid.uuid4()), "declaredName": "SmokeTest"}},
         {"@type": "DataVersion", "payload": {"@type": "NoSuchType", "@id": str(uuid.uuid4())}},
         {"@type": "DataVersion", "payload": {"declaredName": "no type"}},
         {"@type": "DataVersion", "payload": None},
@@ -138,7 +137,7 @@ def test_tags_and_missing_entries_do_not_crash(base_url, headers, project):
         42,
         None,
     ],
-    ids=["unknown_package", "unknown_type", "no_type", "null_payload", "missing_payload", "string_change", "number_change", "null_change"],
+    ids=["unknown_type", "no_type", "deletion_without_identity", "missing_payload", "string_change", "number_change", "null_change"],
 )
 def test_commit_with_invalid_change_returns_400(base_url, headers, project, change):
     body = {"@type": "CommitRequest", "description": "smoke commit", "change": [change]}
@@ -152,3 +151,17 @@ def test_commit_with_invalid_change_list_returns_400(base_url, headers, project,
     response = requests.post(f"{base_url}/projects/{project['@id']}/commits", json=body, headers=headers, timeout=10)
     assert response.status_code == 400, f"{response.status_code} {response.text}"
     assert_alive(base_url, headers)
+
+
+def test_commit_with_known_type_returns_201(base_url, headers, project):
+    body = {"@type": "Commit", "description": "smoke commit", "change": [
+        {"@type": "DataVersion", "payload": {"@type": "Package", "@id": str(uuid.uuid4()), "declaredName": "SmokeTest"}}]}
+    response = requests.post(f"{base_url}/projects/{project['@id']}/commits", json=body, headers=headers, timeout=10)
+    assert response.status_code == 201, f"{response.status_code} {response.text}"
+    assert_alive(base_url, headers)
+
+
+def test_commit_with_empty_change_list_returns_400(base_url, headers, project):
+    response = requests.post(f"{base_url}/projects/{project['@id']}/commits",
+                             json={"description": "nothing", "change": []}, headers=headers, timeout=10)
+    assert response.status_code == 400, f"{response.status_code} {response.text}"

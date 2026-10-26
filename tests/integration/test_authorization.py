@@ -3,7 +3,7 @@ import uuid
 import pytest
 import requests
 
-from conftest import auth
+from conftest import auth, get_all
 
 
 def create_project(base_url, token, **extra):
@@ -98,7 +98,7 @@ def test_project_survives_foreign_delete(base_url, owner, make_login, project):
 
 def test_admin_sees_everything(base_url, admin_token, project):
     assert requests.get(f"{base_url}/projects/{project['@id']}", headers=auth(admin_token), timeout=10).status_code == 200
-    listed = requests.get(f"{base_url}/projects", headers=auth(admin_token), timeout=30).json()
+    listed = get_all(f"{base_url}/projects", auth(admin_token))
     assert project["@id"] in [p["@id"] for p in listed]
 
 
@@ -115,16 +115,18 @@ def test_group_access(base_url, make_login):
 
     # Member C: read and write, but no delete.
     assert requests.get(f"{base_url}/projects/{pid}", headers=auth(token_c), timeout=10).status_code == 200
-    listed = requests.get(f"{base_url}/projects", headers=auth(token_c), timeout=30).json()
+    listed = get_all(f"{base_url}/projects", auth(token_c))
     assert pid in [p["@id"] for p in listed]
     commit = requests.post(f"{base_url}/projects/{pid}/commits",
-                           json={"description": "by C", "change": []}, headers=auth(token_c), timeout=10)
-    assert commit.status_code == 200, commit.text
+                           json={"description": "by C", "change": [{"payload": {
+                               "@type": "Package", "@id": str(uuid.uuid4()), "declaredName": "by C"}}]},
+                           headers=auth(token_c), timeout=10)
+    assert commit.status_code == 201, commit.text
     assert requests.delete(f"{base_url}/projects/{pid}", headers=auth(token_c), timeout=10).status_code == 404
 
     # Member of another group: nothing.
     assert requests.get(f"{base_url}/projects/{pid}", headers=auth(token_d), timeout=10).status_code == 404
-    listed = requests.get(f"{base_url}/projects", headers=auth(token_d), timeout=30).json()
+    listed = get_all(f"{base_url}/projects", auth(token_d))
     assert pid not in [p["@id"] for p in listed]
 
     # The owner may delete.
@@ -144,13 +146,13 @@ def test_admin_may_create_for_any_group(base_url, admin_token):
 
 
 def test_library_projects_admin_only(base_url, admin_token, make_login):
-    admin_list = requests.get(f"{base_url}/projects", headers=auth(admin_token), timeout=30).json()
+    admin_list = get_all(f"{base_url}/projects", auth(admin_token))
     libraries = [p for p in admin_list if p.get("description") == "Preloaded Project"]
     assert libraries, "fresh DB should preload library projects"
     library_id = libraries[0]["@id"]
 
     _, token = make_login()
-    user_list = requests.get(f"{base_url}/projects", headers=auth(token), timeout=30).json()
+    user_list = get_all(f"{base_url}/projects", auth(token))
     assert all(p.get("description") != "Preloaded Project" for p in user_list)
     assert library_id not in [p["@id"] for p in user_list]
     assert requests.get(f"{base_url}/projects/{library_id}", headers=auth(token), timeout=10).status_code == 404

@@ -10,6 +10,7 @@
 #include "Controller/CommitController.hpp"
 #include "Controller/DataBaseController.h"
 #include "Controller/ElementsController.hpp"
+#include "Controller/QueryController.hpp"
 #include "Controller/DigitalTwinController.hpp"
 #include "Services/AuthenticationService.h"
 #include "Services/LoginThrottle.h"
@@ -130,6 +131,8 @@ int main() {
         resp->addHeader("Access-Control-Allow-Origin", origin);
         resp->addHeader("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
         resp->addHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+        // Pagination links must be readable by cross-origin clients (browsers hide non-safelisted headers otherwise).
+        resp->addHeader("Access-Control-Expose-Headers", "Link");
         resp->addHeader("Access-Control-Max-Age", "86400");
         resp->addHeader("Access-Control-Allow-Credentials", "true");
     };

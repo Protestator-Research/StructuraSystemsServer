@@ -3,9 +3,13 @@
 #include <bsoncxx/builder/basic/array.hpp>
 #include <bsoncxx/builder/basic/document.hpp>
 #include <bsoncxx/builder/basic/kvp.hpp>
+#include <bsoncxx/json.hpp>
 #include <bsoncxx/types.hpp>
 #include <mongocxx/options/update.hpp>
 #include <sodium.h>
+#include <boost/uuid/random_generator.hpp>
+#include <boost/uuid/uuid_io.hpp>
+#include <nlohmann/json.hpp>
 
 #include <exception>
 #include <iostream>
@@ -60,6 +64,8 @@ namespace StructuraSystems::Server
 			std::cout << "[migration] Database schema version " << version << ", migrating to " << CURRENT_SCHEMA_VERSION << std::endl;
 			if (version <= 1)
 				migrateFrom1To2();
+			if (version <= 2)
+				migrateFrom2To3();
 
 			writeSchemaVersion(CURRENT_SCHEMA_VERSION);
 			std::cout << "[migration] Done, schema version is now " << CURRENT_SCHEMA_VERSION << std::endl;
@@ -185,5 +191,108 @@ namespace StructuraSystems::Server
 		}
 
 		std::cout << "[migration] 1 -> 2: end" << std::endl;
+	}
+
+	void DatabaseMigrator::migrateFrom2To3()
+	{
+		std::cout << "[migration] 2 -> 3: start" << std::endl;
+
+		auto branches = Database["branches"];
+		auto commits = Database["commits"];
+
+		// 1. Branches get their owning project from the project they are stored for.
+		{
+			std::vector<std::pair<std::string, std::string>> pending;
+			for (auto&& doc : branches.find({}))
+			{
+				const auto projectId = doc["_project_id"];
+				if (!projectId || projectId.type() != bsoncxx::type::k_string)
+					continue;
+				const auto owner = doc["owningProject"];
+				if (owner && owner.type() == bsoncxx::type::k_document && owner.get_document().value["@id"])
+					continue;
+				const auto id = doc["_id"];
+				if (!id || id.type() != bsoncxx::type::k_string)
+					continue;
+				pending.emplace_back(std::string(id.get_string().value), std::string(projectId.get_string().value));
+			}
+			for (const auto& [id, projectId] : pending)
+			{
+				branches.update_one(
+					make_document(kvp("_id", id)),
+					make_document(kvp("$set", make_document(kvp("owningProject", make_document(kvp("@id", projectId)))))));
+			}
+			std::cout << "[migration] 2 -> 3: step 1 branches with owningProject set: " << pending.size() << std::endl;
+		}
+
+		// 2. Every DataVersion of a commit gets an own @id (a random UUID), its identity and its commit. Earlier versions wrote
+		// DataVersions without @id, or with the id of the payload as @id.
+		{
+			int commitsChanged = 0;
+			int versionsChanged = 0;
+			std::vector<std::pair<std::string, std::string>> pending;
+			for (auto&& doc : commits.find({}))
+			{
+				const auto id = doc["_id"];
+				if (!id || id.type() != bsoncxx::type::k_string)
+					continue;
+				auto json = nlohmann::json::parse(bsoncxx::to_json(doc), nullptr, false);
+				if (!json.is_object() || !json.contains("change") || !json["change"].is_array())
+					continue;
+
+				const std::string commitId(id.get_string().value);
+				bool changed = false;
+				for (auto& entry : json["change"])
+				{
+					if (!entry.is_object())
+						continue;
+					bool entryChanged = false;
+
+					std::string payloadId;
+					if (entry.contains("payload") && entry["payload"].is_object()
+						&& entry["payload"].contains("@id") && entry["payload"]["@id"].is_string())
+						payloadId = entry["payload"]["@id"].get<std::string>();
+
+					if (!entry.contains("@id") || !entry["@id"].is_string() || entry["@id"].get<std::string>().empty()
+						|| entry["@id"].get<std::string>() == payloadId)
+					{
+						entry["@id"] = boost::uuids::to_string(boost::uuids::random_generator()());
+						entryChanged = true;
+					}
+					if ((!entry.contains("identity") || !entry["identity"].is_object()) && !payloadId.empty())
+					{
+						entry["identity"] = {{"@id", payloadId}, {"@type", "DataIdentity"}};
+						entryChanged = true;
+					}
+					if (!entry.contains("commit") || !entry["commit"].is_object())
+					{
+						entry["commit"] = {{"@id", commitId}};
+						entryChanged = true;
+					}
+					if (entryChanged)
+					{
+						++versionsChanged;
+						changed = true;
+					}
+				}
+				if (changed)
+				{
+					nlohmann::json update = nlohmann::json::object();
+					update["change"] = json["change"];
+					pending.emplace_back(commitId, update.dump());
+				}
+			}
+			for (const auto& [commitId, update] : pending)
+			{
+				commits.update_one(
+					make_document(kvp("_id", commitId)),
+					make_document(kvp("$set", bsoncxx::from_json(update))));
+				++commitsChanged;
+			}
+			std::cout << "[migration] 2 -> 3: step 2 commits changed: " << commitsChanged
+				<< ", data versions completed: " << versionsChanged << std::endl;
+		}
+
+		std::cout << "[migration] 2 -> 3: end" << std::endl;
 	}
 }

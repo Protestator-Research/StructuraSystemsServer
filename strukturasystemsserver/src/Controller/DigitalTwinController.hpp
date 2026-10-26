@@ -34,18 +34,9 @@ namespace StructuraSystems::Server {
 
             const auto twins = DTService->getAllTwinsForProject(project);
 
-            std::string returnValue = "[\r\n";
-            for (size_t i = 0; i < twins.size(); i++)
-            {
-                returnValue += twins[i]->serializeToJson();
-                if (i < (twins.size() - 1))
-                    returnValue += ",\r\n";
-            }
-            returnValue += "]";
-
-            const auto response = drogon::HttpResponse::newHttpResponse(drogon::k200OK, drogon::CT_APPLICATION_JSON);
-            response->setBody(returnValue);
-            callback(response);
+            callback(paginate(request, twins,
+                [](const std::shared_ptr<TwinResponse>& twin) { return boost::uuids::to_string(twin->getId()); },
+                [](const std::shared_ptr<TwinResponse>& twin) { return twin->serializeToJson(); }));
         }
 
         void postTwin(const drogon::HttpRequestPtr & request, std::function<void(const drogon::HttpResponsePtr&)>&& callback, const std::string& projectId) {
@@ -79,7 +70,7 @@ namespace StructuraSystems::Server {
             const auto commit = ProjectVerService->getCommitById(project,referencedCommit->getId());
             if (commit == nullptr)
             {
-                callback(drogon::HttpResponse::newHttpResponse(drogon::k404NotFound, drogon::CT_APPLICATION_JSON));
+                callback(jsonError(drogon::k404NotFound, "Commit not found."));
                 return;
             }
 
@@ -95,8 +86,7 @@ namespace StructuraSystems::Server {
             if (!project)
                 return;
 
-            const auto response = drogon::HttpResponse::newHttpResponse(drogon::k501NotImplemented, drogon::CT_APPLICATION_JSON);
-            callback(response);
+            callback(jsonError(drogon::k501NotImplemented, "Not implemented."));
         }
 
     private:

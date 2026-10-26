@@ -21,6 +21,7 @@ namespace SysMLv2::REST
 	class DataVersion;
 	class Tag;
 	class Data;
+	class Query;
 
 }
 
@@ -69,6 +70,12 @@ namespace StructuraSystems::Server
 		void deleteTag(std::shared_ptr<SysMLv2::REST::Tag> tag);
 		std::map<boost::uuids::uuid, std::vector<std::shared_ptr<SysMLv2::REST::Tag>>> getAllTags();
 
+		void addQuery(boost::uuids::uuid projectId, std::shared_ptr<SysMLv2::REST::Query> query);
+		void updateQuery(boost::uuids::uuid projectId, std::shared_ptr<SysMLv2::REST::Query> query);
+		void deleteQuery(std::shared_ptr<SysMLv2::REST::Query> query);
+		void deleteQueriesOfProject(boost::uuids::uuid projectId);
+		std::map<boost::uuids::uuid, std::vector<std::shared_ptr<SysMLv2::REST::Query>>> getAllQueries();
+
 		void addTwin(boost::uuids::uuid projectId, std::shared_ptr<StructuraSystems::Server::TwinResponse> twinTag);
 		void deleteTwin(std::shared_ptr<StructuraSystems::Server::TwinResponse> twinTag);
 		std::map<boost::uuids::uuid, std::vector<std::shared_ptr<StructuraSystems::Server::TwinResponse>>> getAllTwins();
@@ -108,6 +115,7 @@ namespace StructuraSystems::Server
 		const std::string DATA_VERSION_COLLECTION_IDENTIFIER = "data_versions";
 		const std::string TAG_COLLECTION_IDENTIFIER = "tags";
 		const std::string BRANCHES_COLLECTION_IDENTIFIER = "branches";
+		const std::string QUERY_COLLECTION_IDENTIFIER = "queries";
 		const std::string USER_COLLECTION_IDENTIFIER = "users";
 		const std::string DIGITAL_TWIN_COLLECTION_IDENTIFIER = "digital_twins";
 		const std::string VERSION_COLLECTION_IDENTIFIER = "versions";

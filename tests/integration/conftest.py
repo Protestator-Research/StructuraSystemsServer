@@ -58,6 +58,19 @@ def login(base_url, username, password):
     return response.json()["bearer"]
 
 
+def get_all(url, headers, timeout=30, **params):
+    """All items of a paginated collection: follows the rel="next" Link header until there is none."""
+    items = []
+    response = requests.get(url, headers=headers, params=params, timeout=timeout)
+    while True:
+        assert response.status_code == 200, response.text
+        items.extend(response.json())
+        next_url = response.links.get("next", {}).get("url")
+        if not next_url:
+            return items
+        response = requests.get(next_url, headers=headers, timeout=timeout)
+
+
 def auth(token):
     return {"Authorization": f"Bearer {token}"}
 

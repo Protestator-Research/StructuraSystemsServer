@@ -6,7 +6,7 @@
 mongodump --db structura_systems --out <backup-verzeichnis>
 ```
 
-Beim ersten Start migriert der Server die Datenbank automatisch (Schema-Version 1 auf 2). Die Version steht in der Collection `schema`, Dokument `{_id: "schema", version: 2}`. Eine neu angelegte Datenbank erhaelt direkt Version 2.
+Beim ersten Start migriert der Server die Datenbank automatisch (Schema-Version 1 auf 2 und 2 auf 3). Die Version steht in der Collection `schema`, Dokument `{_id: "schema", version: 3}`. Eine neu angelegte Datenbank erhaelt direkt Version 3. Die Aenderungen von Version 3 stehen im Abschnitt "Konformitaet zur Systems Modeling API (REST/HTTP-PSM)" weiter unten.
 
 ## Was die Migration 1 -> 2 aendert
 
@@ -18,7 +18,7 @@ Die Migration ist idempotent und nutzt nur gezielte Updates, keine vollstaendige
 4. Jeder Benutzer, dessen Passwort `admin` lautet, erhaelt `mustChangePassword: true` und wird als Warnung geloggt.
 5. Erst wenn alle Schritte erfolgreich waren, wird `schema.version = 2` geschrieben.
 
-Schlaegt ein Schritt fehl, loggt der Server `[migration] FAILED: ...` und beendet sich mit Fehlercode. Ist die Datenbank neuer als das Binary (Version groesser 2), startet der Server ebenfalls nicht.
+Schlaegt ein Schritt fehl, loggt der Server `[migration] FAILED: ...` und beendet sich mit Fehlercode. Ist die Datenbank neuer als das Binary (Version groesser 3), startet der Server ebenfalls nicht.
 
 ## Projekte ohne Eigentuemer
 
@@ -95,6 +95,50 @@ Siehe [DEPLOYMENT.md](DEPLOYMENT.md).
 - **`GET /version` braucht ein gueltiges Token** (401 ohne).
 - Neu: `mongo_tls` / `MONGO_TLS=true`. Benutzer und Passwort der MongoDB werden Percent-kodiert.
 - `docker-compose.yaml` liest Zugangsdaten aus einer `.env` (Vorlage `.env.example`), bindet Ports an `127.0.0.1` und startet mongo-express nur mit `--profile dev`.
+
+## Konformitaet zur Systems Modeling API (REST/HTTP-PSM)
+
+Der Server setzt jetzt die REST/HTTP-PSM der *Systems Modeling API and Services v1.1* um (Ausnahme: Derived Property Conformance). Das aendert das Verhalten bestehender Endpunkte. **Clients, vor allem das Webinterface, muessen angepasst werden.** Die Konformitaet belegen die Tests in `tests/integration/conformance/` (je Annex-A-Testfall eine Testfunktion, Name mit der ID, z. B. `test_pim_pcb_010_create_commit`).
+
+### Breaking Changes
+
+1. **Anlegende POSTs liefern 201** statt 200: `POST /projects/{id}/commits`, `POST …/branches`, `POST …/tags` und `POST …/queries`. Clients, die auf 200 pruefen, muessen 201 akzeptieren.
+2. **Kein Erstcommit mehr.** Ein neues Projekt hat den Branch `main` mit `head = null` und noch keine Commits (`GET …/commits` liefert `[]`). Clients duerfen nicht mehr den letzten Commit eines neuen Projekts voraussetzen und muessen einen Branch ohne Head anzeigen koennen. Bibliotheksprojekte behalten ihren Import-Commit; ihr Default-Branch heisst bei neu angelegten Datenbanken `main` (bestehende Datenbanken behalten `Main`).
+3. **Commits sind Deltas.** `change` enthaelt nur noch, was neu angelegt, geaendert oder geloescht wird, nicht mehr den Vollstand. Der Stand an einem Commit ist die Vereinigung der Staende seiner Vorgaenger plus der Aenderungen (`versionedData`, Kap. 7.1.2). `GET …/elements` liefert diesen kumulierten Stand. **Loeschungen** sendet der Client als `DataVersion` ohne `payload`: `{"@type": "DataVersion", "identity": {"@id": "<id>"}, "payload": null}`. Das Loeschen eines Elements loescht automatisch die Relationships, die es als `source` oder `target` haben. Geloeschte Daten bleiben in frueheren Commits sichtbar. Eine Loeschung ohne `identity` oder einer unbekannten Identitaet, dieselbe Identitaet zweimal in einem Commit und ein unbekannter Vorgaenger-Commit sind Fehler (400/404).
+4. **`DataVersion` hat immer eine eigene `@id`** (zufaellige UUID, getrennt von der Id des Elements) und verweist mit `commit` auf ihren Commit. Die Id einer Aenderung (`GET …/changes/{changeId}`) ist diese `DataVersion`-Id.
+5. **Branch-Auswahl beim Commit:** `POST …/commits?branchId=<uuid>` (ungueltige UUID 400, unbekannter oder fremder Branch 404). Der Alias `?branch=<Name>` bleibt, liefert bei unbekanntem Namen aber **404 statt des stillen Fallbacks auf den Default-Branch**. Ohne Parameter gilt der Default-Branch. `CommitRequest.previousCommits` wird ausgewertet (die Vorgaenger sind der Head des Branches plus die angegebenen Commits); ein unbekannter oder fremder Commit ergibt 404.
+6. **`name` ist Pflicht** bei `POST /projects` (nicht leerer String, sonst 400) und bei `POST …/branches`.
+7. **Unbekannter Payload-`@type` ergibt 400.** Erlaubt sind KerML/SysML-Elemente, `ProjectUsage`, `ExternalRelationship` und `ExternalData`. Bisher wurde ein unbekannter Typ als `{"@id","@type"}` gespeichert.
+8. **Eine leere `change`-Liste ergibt 400.**
+9. **Pagination fuer alle Collection-GETs.** Ohne Parameter liefern sie hoechstens 100 Eintraege (`page[size]`, 1 bis 1000, sonst 400). Weitere Seiten stehen im Header `Link` (`rel="next"` / `rel="prev"`, absolute URL) und werden mit `page[after]` / `page[before]` (undurchsichtiger Cursor, ungueltig 400) abgerufen. **Clients, die `GET /projects` oder andere Listen ohne Parameter lesen, bekommen bei mehr als 100 Eintraegen nur die erste Seite** und muessen dem `Link`-Header folgen. Betroffen: Projekte, Commits, Branches, Tags, Elements, Roots, Relationships, Changes, Diff, Queries, Query-Ergebnisse, Twins. Hinter einem Reverse Proxy werden `X-Forwarded-Proto` und `X-Forwarded-Host` fuer die Link-URLs nur beruecksichtigt, wenn die Gegenstelle in `trusted_proxies` steht.
+10. **Fehlerantworten sind JSON** `{"error": "..."}`, auch 404 ohne Body und der Klartext bei unbekanntem Commit. Fremde Commits und Branches eines anderen Projekts ergeben 404 (wie unbekannte), damit die Zugriffskontrolle keine Aufzaehlung zulaesst.
+11. **`/projects/{id}/commits/{c}/root` heisst jetzt `…/roots`** (der alte Pfad bleibt als Alias). `…/relationships` und `…/roots` waren bisher 501.
+
+### Schema 3 und automatische Migration
+
+`CURRENT_SCHEMA_VERSION` ist 3. Die Migration 2 -> 3 laeuft beim ersten Start automatisch, ist idempotent und schreibt die Version erst nach Erfolg:
+
+1. Branches erhalten `owningProject` aus `_project_id` (bisher `null`).
+2. In gespeicherten Commits erhaelt jede `DataVersion` ohne `@id` oder mit der Id des Payloads als `@id` eine zufaellige UUID. Fehlen `identity` oder `commit`, werden sie ergaenzt.
+
+Bestehende Commits behalten ihren Inhalt. Weil sie bisher den Vollstand enthielten, gilt fuer sie weiterhin dieser Inhalt; Elemente, die ein altes Webinterface durch Weglassen "geloescht" hat, bleiben im kumulierten Stand sichtbar. Backup vor dem Update (siehe oben). Der Rollback geht nur ueber das Backup, weil die alte Version Schema 3 nicht liest.
+
+### Neue Routen
+
+| Route | Zweck |
+|---|---|
+| `PUT /projects/{id}` | Name, Beschreibung, Default-Branch aendern (`defaultBranch: {"@id"}`; unbekannter Branch 404) |
+| `POST /projects/{id}/tags`, `DELETE …/tags/{tagId}` | Tags anlegen (201, doppelter Name 409) und loeschen |
+| `GET …/commits/{c}/diff?baseCommitId=&changeTypes=` | Unterschiede zwischen zwei Commits (`DataDifference`) |
+| `POST …/branches/{b}/merge?sourceCommitId=&description=` | Commits in einen Branch mergen; 409 mit den Konflikt-Identitaeten, Body optional als Resolution (Array von Data) |
+| `GET …/changes?changeTypes=CREATED,UPDATED,DELETED` | Filter fuer die Aenderungen (Alias `change_type`) |
+| `GET …/elements/{e}/relationships?direction=in\|out\|both` | Relationships eines Elements |
+| `GET …/commits/{c}/roots` | Elemente ohne Owner |
+| `GET/POST /projects/{p}/queries`, `GET/PUT/DELETE …/queries/{q}`, `GET …/queries/{q}/results`, `GET/POST /projects/{p}/query-results` | QueryService; Queries liegen in der neuen Collection `queries` und werden mit dem Projekt geloescht |
+
+### Bibliothek
+
+Der Server benoetigt `sysmllib/2610.3` (statt 2610.2). Die Versionierungslogik (`versionedData`, Commit-Pruefung, Diff, Merge, Query-Auswertung) liegt in der Bibliothek, Namespace `SysMLv2::REST::Versioning`. Nach dem Wechsel `conan install . -s build_type=Debug --build missing` ausfuehren.
 
 ## Schutz vor Datenverlust
 

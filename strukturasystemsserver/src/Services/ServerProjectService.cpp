@@ -2,7 +2,9 @@
 
 #include "../Controller/DataBaseController.h"
 #include "ProjectVersioningService.h"
+#include "QueryService.h"
 #include "../Entities/db/Project.hpp"
+#include <sysmlv2/rest/entities/Branch.h>
 #include <sysmlv2/rest/entities/Project.h>
 
 #include <mutex>
@@ -42,6 +44,7 @@ namespace StructuraSystems::Server
 		std::unique_lock lock(Mutex);
 		ProjectMap[project->getId()] = project;
 
+		project->getDefaultBranch()->setOwningProject(project);
 		ProjectVersioningService::getInstance()->addBranchFromProject(project);
 
 		DBController->addProject(project);
@@ -59,23 +62,45 @@ namespace StructuraSystems::Server
 	std::shared_ptr<SysMLv2::REST::Project> ServerProjectService::updateProject(boost::uuids::uuid projectId,
 	                                                                            std::string projectName, std::string description, std::shared_ptr<SysMLv2::REST::Branch> branch) {
 		std::unique_lock lock(Mutex);
-		if(ProjectMap.count(projectId)>0) {
-			const auto& project = std::dynamic_pointer_cast<Project>(ProjectMap[projectId]);
+		const auto found = ProjectMap.find(projectId);
+		if (found == ProjectMap.end())
+			return nullptr;
 
-			project->setName(projectName);
+		const auto project = std::dynamic_pointer_cast<Project>(found->second);
+		const auto oldName = project->getName();
+		const auto oldDescription = project->getDescription();
+		std::shared_ptr<SysMLv2::REST::Branch> oldDefaultBranch;
+		bool defaultBranchChanged = false;
+
+		try {
+			// The default branch first: whether the branch exists and the change happen under the lock of the versioning service
+			// (the only other reader of the field), and an unknown branch leaves everything as it was.
+			if (branch != nullptr)
+			{
+				oldDefaultBranch = ProjectVersioningService::getInstance()->replaceDefaultBranch(project, branch->getId());
+				defaultBranchChanged = true;
+			}
+
+			// An empty name means that the name is not changed.
+			if(!projectName.empty())
+				project->setName(projectName);
 
 			if(!description.empty())
 				project->setDescription(description);
 
-			if(branch != nullptr)
-				project->setDefaultBranch(branch);
-
 			DBController->updateProject(project);
-
-			return project;
+		}
+		catch (...) {
+			// Memory follows the database: put the old state back.
+			project->setName(oldName);
+			std::string restoredDescription = oldDescription;
+			project->setDescription(restoredDescription);
+			if (defaultBranchChanged)
+				ProjectVersioningService::getInstance()->restoreDefaultBranch(project, oldDefaultBranch);
+			throw;
 		}
 
-		return nullptr;
+		return project;
 	}
 
 	std::shared_ptr<SysMLv2::REST::Project> ServerProjectService::deleteProject(boost::uuids::uuid projectId) {
@@ -85,7 +110,18 @@ namespace StructuraSystems::Server
 			return nullptr;
 
 		const auto deletedProject = std::dynamic_pointer_cast<Project>(baseDeleted);
-		DBController->deleteProject(deletedProject);
+		try {
+			DBController->deleteProject(deletedProject);
+		}
+		catch (...) {
+			// The database kept the project, so memory keeps it as well.
+			ProjectMap[projectId] = deletedProject;
+			throw;
+		}
+		// Lock order: ServerProjectService before QueryService and ProjectVersioningService. The queries of a deleted project go
+		// with it; the versioning service lets go of its commits (cache and index), branches and tags.
+		QueryService::getInstance()->deleteQueriesOfProject(deletedProject->getId());
+		ProjectVersioningService::getInstance()->forgetProject(deletedProject);
 		return deletedProject;
 	}
 
@@ -98,8 +134,16 @@ namespace StructuraSystems::Server
 			return nullptr;
 
 		const auto project = std::dynamic_pointer_cast<Project>(found->second);
-		project->setOwnership(owner.value_or(project->getOwner()), owningGroup.value_or(project->getOwningGroup()));
-		DBController->updateProject(project);
+		const auto oldOwner = project->getOwner();
+		const auto oldGroup = project->getOwningGroup();
+		project->setOwnership(owner.value_or(oldOwner), owningGroup.value_or(oldGroup));
+		try {
+			DBController->updateProject(project);
+		}
+		catch (...) {
+			project->setOwnership(oldOwner, oldGroup);
+			throw;
+		}
 		return project;
 	}
 

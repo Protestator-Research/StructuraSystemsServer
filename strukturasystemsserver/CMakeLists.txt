@@ -22,6 +22,7 @@ set(SOURCES
         src/Controller/AuthenticationController.hpp
         src/Controller/ElementsController.hpp
         src/Controller/CommitController.hpp
+        src/Controller/QueryController.hpp
         src/Controller/Helper/RequestHelper.hpp
         src/Entities/json/AuthenticationRequest.h
         src/Entities/json/AuthenticationRequest.cpp
@@ -33,6 +34,8 @@ set(SOURCES
         src/Services/ElementNavigationService.cpp
         src/Services/ProjectVersioningService.h
         src/Services/ProjectVersioningService.cpp
+        src/Services/QueryService.h
+        src/Services/QueryService.cpp
         src/Services/AuthenticationService.h
         src/Services/AuthenticationService.cpp
         src/Services/AccessControlService.h

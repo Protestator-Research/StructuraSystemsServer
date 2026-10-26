@@ -46,7 +46,7 @@ namespace StructuraSystems::Server
 	private:
 		ServerProjectService();
 
-		/// Registers the project, creates its branch and initial commit and stores it. Takes the
+		/// Registers the project, creates its default branch (without head, a new project has no commit) and stores it. Takes the
 		/// unique lock itself.
 		std::shared_ptr<SysMLv2::REST::Project> storeNewProject(const std::shared_ptr<Project>& project);
 

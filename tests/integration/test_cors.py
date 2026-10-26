@@ -25,6 +25,7 @@ def test_allowed_origin_is_reflected(cors_url, origin):
     response = requests.post(f"{cors_url}/login", json={}, headers={"Origin": origin}, timeout=10)
     assert response.headers["Access-Control-Allow-Origin"] == origin
     assert response.headers["Access-Control-Allow-Credentials"] == "true"
+    assert response.headers["Access-Control-Expose-Headers"] == "Link"
     assert "Origin" in vary_values(response)
 
 
