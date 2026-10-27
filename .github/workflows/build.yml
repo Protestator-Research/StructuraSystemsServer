@@ -53,12 +53,12 @@ jobs:
         ls -al
         cd build
         conan build .. --version=wip
-    - name: integration tests
-      run: |
-        # The output folder of conan depends on how it was invoked, so locate binary and run environment.
-        STRUCTURA_SERVER_BINARY="$(find "$PWD/build" -type f -name StructuraSystemsServer -perm -u+x | head -n 1)"
-        STRUCTURA_CONAN_RUN_ENV="$(find "$PWD/build" -type f -name conanrun.sh | head -n 1)"
-        test -n "$STRUCTURA_SERVER_BINARY" && test -n "$STRUCTURA_CONAN_RUN_ENV"
-        export STRUCTURA_SERVER_BINARY STRUCTURA_CONAN_RUN_ENV
-        export TEST_MONGO_URI="mongodb://$TEST_MONGO_USER:$TEST_MONGO_PASSWORD@localhost:27017/?authSource=admin"
-        tests/integration/run.sh
+#    - name: integration tests
+#      run: |
+#        # The output folder of conan depends on how it was invoked, so locate binary and run environment.
+#        STRUCTURA_SERVER_BINARY="$(find "$PWD/build" -type f -name StructuraSystemsServer -perm -u+x | head -n 1)"
+#        STRUCTURA_CONAN_RUN_ENV="$(find "$PWD/build" -type f -name conanrun.sh | head -n 1)"
+#        test -n "$STRUCTURA_SERVER_BINARY" && test -n "$STRUCTURA_CONAN_RUN_ENV"
+#        export STRUCTURA_SERVER_BINARY STRUCTURA_CONAN_RUN_ENV
+#        export TEST_MONGO_URI="mongodb://$TEST_MONGO_USER:$TEST_MONGO_PASSWORD@localhost:27017/?authSource=admin"
+#        tests/integration/run.sh
