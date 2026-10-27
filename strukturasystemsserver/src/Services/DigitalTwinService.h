@@ -10,6 +10,7 @@
 #include <vector>
 #include <map>
 #include <memory>
+#include <shared_mutex>
 #include <boost/uuid/uuid.hpp>
 
 #include "../Entities/json/TwinResponse.h"
@@ -30,7 +31,8 @@ namespace StructuraSystems::Server {
     private:
         DigitalTwinService();
 
-        static std::shared_ptr<DigitalTwinService> Instance;
+        /// Guards ProjectIdTwinMap. Not recursive.
+        mutable std::shared_mutex Mutex;
 
         std::map<boost::uuids::uuid, std::vector<std::shared_ptr<TwinResponse>>> ProjectIdTwinMap;
         DataBaseController* DBController;

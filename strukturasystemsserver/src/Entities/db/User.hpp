@@ -5,6 +5,7 @@
 #pragma once
 
 #include <string>
+#include <utility>
 #include <nlohmann/json.hpp>
 
 namespace StructuraSystems::Server {
@@ -30,8 +31,13 @@ namespace StructuraSystems::Server {
             nlohmann::json json = nlohmann::json::parse(jsonString);
             Username = json["_id"];
             HashedPassword = json["securityString"];
-            Group = json["group"];
-            Role = static_cast<USER_ROLE>(json["role"].get<int>());
+            if (json.contains("group") && json["group"].is_string())
+                Group = json["group"].get<std::string>();
+            Role = USER_ROLE::USER;
+            if (json.contains("role") && json["role"].is_number_integer())
+                Role = static_cast<USER_ROLE>(json["role"].get<int>());
+            if (json.contains("mustChangePassword") && json["mustChangePassword"].is_boolean())
+                MustChangePassword = json["mustChangePassword"].get<bool>();
         }
 
         User(const User& other) {
@@ -39,6 +45,7 @@ namespace StructuraSystems::Server {
             HashedPassword = other.HashedPassword;
             Group = other.Group;
             Role = other.Role;
+            MustChangePassword = other.MustChangePassword;
         }
 
         ~User() = default;
@@ -59,6 +66,18 @@ namespace StructuraSystems::Server {
             return Group;
         }
 
+        void setGroup(std::string group) {
+            Group = std::move(group);
+        }
+
+        bool mustChangePassword() const{
+            return MustChangePassword;
+        }
+
+        void setMustChangePassword(bool mustChangePassword) {
+            MustChangePassword = mustChangePassword;
+        }
+
         USER_ROLE role() const{
             return Role;
         }
@@ -73,6 +92,7 @@ namespace StructuraSystems::Server {
             json["securityString"] = HashedPassword;
             json["group"] = Group;
             json["role"] = static_cast<int>(Role);
+            json["mustChangePassword"] = MustChangePassword;
             return json.dump();
         }
 
@@ -81,6 +101,7 @@ namespace StructuraSystems::Server {
             HashedPassword = other.HashedPassword;
             Group = other.Group;
             Role = other.Role;
+            MustChangePassword = other.MustChangePassword;
             return *this;
         }
 
@@ -89,5 +110,6 @@ namespace StructuraSystems::Server {
         std::string HashedPassword;
         std::string Group = "";
         USER_ROLE Role = USER_ROLE::USER;
+        bool MustChangePassword = false;
     };
 }

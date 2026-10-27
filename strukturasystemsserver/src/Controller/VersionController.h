@@ -32,7 +32,5 @@ namespace StructuraSystems::Server {
         const std::string VersionString = VERSION;
         const std::string CommitHash = COMMIT_HASH;
         const std::string BuildNumber = BUILD_NUMBER;
-
-        static std::shared_ptr<VersionController> Instance;
     };
 }

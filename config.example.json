@@ -1,0 +1,44 @@
+{
+    "_comment": "Example configuration. Copy to config.json (or point STRUCTURA_CONFIG at a copy). Values in custom_config are documented in docs/DEPLOYMENT.md. Environment variables MONGO_ADDRESS, MONGO_USERNAME, MONGO_PASSWORD, MONGO_DATABASE and MONGO_TLS override the mongo_* keys. Do not commit real credentials.",
+    "listeners": [
+      {
+        "address": "127.0.0.1",
+        "port": 8088,
+        "https": false
+      }
+    ],
+    "custom_config": {
+      "_mongo_address": "Host:port of MongoDB. Default localhost:27017.",
+      "mongo_address": "localhost:27017",
+      "_mongo_username": "Application user. Prefer env MONGO_USERNAME; empty means no authentication.",
+      "mongo_username": "",
+      "_mongo_password": "Prefer env MONGO_PASSWORD. Special characters are percent-encoded automatically.",
+      "mongo_password": "",
+      "_mongo_database": "Database name. Default structura_systems.",
+      "mongo_database": "structura_systems",
+      "_mongo_tls": "true adds tls=true to the connection (or set env MONGO_TLS=true). Default false.",
+      "mongo_tls": false,
+      "_allowed_origins": "Browser origins that may call the API (CORS), exact match, e.g. https://app.example.com. Empty: no CORS headers are sent.",
+      "allowed_origins": ["https://app.example.com"],
+      "_trusted_proxies": "IP addresses of reverse proxies whose X-Forwarded-For header is trusted. Default [127.0.0.1].",
+      "trusted_proxies": ["127.0.0.1"],
+      "_session_idle_seconds": "A session expires after this time without a request. Default 3600.",
+      "session_idle_seconds": 3600,
+      "_session_max_seconds": "Absolute session lifetime. Default 43200.",
+      "session_max_seconds": 43200,
+      "_login_max_failures_per_user": "Failed logins per user within the window before /login answers 429. Default 5.",
+      "login_max_failures_per_user": 5,
+      "_login_failure_window_seconds": "Window for the per-user failure limit. Default 900.",
+      "login_failure_window_seconds": 900,
+      "_login_max_requests_per_ip": "Login requests per client IP within the window. Default 20.",
+      "login_max_requests_per_ip": 20,
+      "_login_ip_window_seconds": "Window for the per-IP limit. Default 60.",
+      "login_ip_window_seconds": 60
+    },
+    "log": {
+      "log_path": "./",
+      "logfile_base_name": "",
+      "log_size_limit": 100000000,
+      "log_level": "INFO"
+    }
+}

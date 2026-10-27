@@ -9,6 +9,7 @@ namespace StructuraSystems::Server {
         Username = user.username();
         Group = user.group();
         UserRole = user.role();
+        MustChangePassword = user.mustChangePassword();
 
     }
 
@@ -17,6 +18,7 @@ namespace StructuraSystems::Server {
         json["username"] = Username;
         json["group"] = Group;
         json["role"] = UserRole;
+        json["mustChangePassword"] = MustChangePassword;
         return json.dump();
     }
 

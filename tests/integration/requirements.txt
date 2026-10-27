@@ -1,0 +1,4 @@
+pytest
+requests
+pymongo
+argon2-cffi

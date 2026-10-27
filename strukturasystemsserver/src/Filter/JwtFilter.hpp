@@ -7,6 +7,7 @@
 #include <drogon/HttpFilter.h>
 
 #include "../Services/AuthenticationService.h"
+#include "../Controller/Helper/RequestHelper.hpp"
 
 namespace StructuraSystems::Server {
     class JwtFilter : public drogon::HttpFilter<StructuraSystems::Server::JwtFilter> {
@@ -26,14 +27,21 @@ namespace StructuraSystems::Server {
 
             try {
 
-                if (AuthenticationService::getInstance()->isTokenAuthenticated(token)) {
-                    fccb();
+                // Validates the session (idle and maximum lifetime) and returns nothing for a user that no longer exists.
+                const auto user = AuthenticationService::getInstance()->getUserFromDatabase(token);
+                if (!user) {
+                    auto res = drogon::HttpResponse::newHttpResponse();
+                    res->setStatusCode(drogon::k401Unauthorized);
+                    fcb(res);
                     return;
                 }
 
-                auto res = drogon::HttpResponse::newHttpResponse();
-                res->setStatusCode(drogon::k401Unauthorized);
-                fcb(res);
+                if (user->mustChangePassword() && !isAllowedWithPendingPasswordChange(req)) {
+                    fcb(jsonError(drogon::k403Forbidden, "password_change_required"));
+                    return;
+                }
+
+                fccb();
 
             } catch (...) {
                 auto res = drogon::HttpResponse::newHttpResponse();
@@ -41,6 +49,11 @@ namespace StructuraSystems::Server {
                 fcb(res);
             }
         }
+
+    private:
+        static bool isAllowedWithPendingPasswordChange(const drogon::HttpRequestPtr &req) {
+            return (req->path() == "/me" && req->method() == drogon::Get) ||
+                   (req->path() == "/me/password" && req->method() == drogon::Put);
+        }
     };
 }
-

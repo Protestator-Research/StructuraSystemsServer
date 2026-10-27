@@ -1,14 +1,17 @@
 ﻿#pragma once
 
+#include <atomic>
 #include <string>
 #include <memory>
 #include <vector>
 #include <map>
 #include <boost/uuid/uuid.hpp>
 #include <mongocxx/instance.hpp>
-#include <mongocxx/uri.hpp>
+// mongocxx 4.6: uri.hpp must come after client.hpp, otherwise to_v1() in options/find.hpp is ambiguous
 #include <mongocxx/client.hpp>
 #include <mongocxx/database.hpp>
+#include <mongocxx/pool.hpp>
+#include <mongocxx/uri.hpp>
 #include "../Entities/db/User.hpp"
 
 namespace SysMLv2::REST
@@ -18,6 +21,7 @@ namespace SysMLv2::REST
 	class DataVersion;
 	class Tag;
 	class Data;
+	class Query;
 
 }
 
@@ -34,7 +38,7 @@ namespace StructuraSystems::Server
 	{
 	public:
 		DataBaseController() = delete;
-		static DataBaseController* createInstance(std::string dbAddress, std::string username, std::string password);
+		static DataBaseController* createInstance(std::string dbAddress, std::string username, std::string password, std::string databaseName, bool tls = false);
 		static DataBaseController* getInstance();
 
 
@@ -66,6 +70,12 @@ namespace StructuraSystems::Server
 		void deleteTag(std::shared_ptr<SysMLv2::REST::Tag> tag);
 		std::map<boost::uuids::uuid, std::vector<std::shared_ptr<SysMLv2::REST::Tag>>> getAllTags();
 
+		void addQuery(boost::uuids::uuid projectId, std::shared_ptr<SysMLv2::REST::Query> query);
+		void updateQuery(boost::uuids::uuid projectId, std::shared_ptr<SysMLv2::REST::Query> query);
+		void deleteQuery(std::shared_ptr<SysMLv2::REST::Query> query);
+		void deleteQueriesOfProject(boost::uuids::uuid projectId);
+		std::map<boost::uuids::uuid, std::vector<std::shared_ptr<SysMLv2::REST::Query>>> getAllQueries();
+
 		void addTwin(boost::uuids::uuid projectId, std::shared_ptr<StructuraSystems::Server::TwinResponse> twinTag);
 		void deleteTwin(std::shared_ptr<StructuraSystems::Server::TwinResponse> twinTag);
 		std::map<boost::uuids::uuid, std::vector<std::shared_ptr<StructuraSystems::Server::TwinResponse>>> getAllTwins();
@@ -76,19 +86,25 @@ namespace StructuraSystems::Server
 		void changeUser(const User& user);
 
 	private:
-		DataBaseController(std::string dBAddress, std::string username, std::string password);
+		DataBaseController(std::string dBAddress, std::string username, std::string password, std::string databaseName, bool tls);
 
 		void addVersionToDatabase();
  
-		static DataBaseController* Instance;
+		static mongocxx::uri buildUri(const std::string& dBAddress, const std::string& username, const std::string& password, bool tls = false);
 
-		mongocxx::instance inst;
-		mongocxx::uri uri;
-		mongocxx::client client;
-		mongocxx::database database;
+		/// Percent-encodes everything except the RFC 3986 unreserved characters.
+		static std::string percentEncode(const std::string& value);
+
+		static std::atomic<DataBaseController*> Instance;
+
+		// The order matters: the instance must exist before and outlive the pool. Every method
+		// acquires its own client from the pool, a single client is not thread safe.
+		mongocxx::instance Inst;
+		mongocxx::pool Pool;
+		std::string DatabaseName;
 
 		void initializeDatabaseIfNotAvailable();
-		void checkDatabaseState();
+		bool checkDatabaseState();
 
 		void deleteDatabaseIfDebug();
 		bool replace(std::string& str, const std::string& from, const std::string& to);
@@ -99,6 +115,7 @@ namespace StructuraSystems::Server
 		const std::string DATA_VERSION_COLLECTION_IDENTIFIER = "data_versions";
 		const std::string TAG_COLLECTION_IDENTIFIER = "tags";
 		const std::string BRANCHES_COLLECTION_IDENTIFIER = "branches";
+		const std::string QUERY_COLLECTION_IDENTIFIER = "queries";
 		const std::string USER_COLLECTION_IDENTIFIER = "users";
 		const std::string DIGITAL_TWIN_COLLECTION_IDENTIFIER = "digital_twins";
 		const std::string VERSION_COLLECTION_IDENTIFIER = "versions";

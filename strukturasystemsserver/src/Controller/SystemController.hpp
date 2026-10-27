@@ -13,7 +13,7 @@ namespace StructuraSystems::Server
 		virtual ~SystemController() = default;
 
 		METHOD_LIST_BEGIN
-		ADD_METHOD_TO(SystemController::getVersionInfo,"/version",drogon::Get);
+		ADD_METHOD_TO(SystemController::getVersionInfo,"/version",drogon::Get,"StructuraSystems::Server::JwtFilter");
 		METHOD_LIST_END
 
 		void getVersionInfo(const drogon::HttpRequestPtr &, std::function<void(const drogon::HttpResponsePtr&)>&& callback) const {

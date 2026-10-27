@@ -8,6 +8,10 @@ This system is a test platform for the SysMLv2 Library we are currently developi
 
 This Software part will be further extended with additional features. Stay tuned!
 
+## Sicherheit / Betrieb
+
+Der Server laeuft hinter einem Reverse Proxy mit TLS und lauscht nur lokal. Konfiguration, Umgebungsvariablen, Reverse-Proxy-Beispiele und die Rotation eingecheckter Zugangsdaten stehen in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md). Aenderungen beim Update und die Datenbankmigration beschreibt [docs/UPGRADE.md](docs/UPGRADE.md).
+
 ## Licensing
 
 This software is licensed under the GPL v3, allowing a free and open source editing of the code. We want to offer you the option to use this libary also for commercial project. This will be done in a later step, since we are currently developing this from the ground up.

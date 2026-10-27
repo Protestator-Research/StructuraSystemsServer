@@ -49,3 +49,12 @@ uploads/**
 # remove folder from Git
 build/**
 .idea/**
+
+# integration tests
+tests/.venv/
+__pycache__/
+.pytest_cache/
+
+# local configuration and secrets
+.env
+config.local.json

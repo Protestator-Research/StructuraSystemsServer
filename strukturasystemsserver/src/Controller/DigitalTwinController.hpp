@@ -15,6 +15,8 @@
 #include "../Services/ServerProjectService.h"
 #include "../Services/DigitalTwinService.h"
 #include "../Filter/JwtFilter.hpp"
+#include "Helper/RequestHelper.hpp"
+#include "Helper/ProjectAccessHelper.hpp"
 
 namespace StructuraSystems::Server {
     class DigitalTwinController : public drogon::HttpController<StructuraSystems::Server::DigitalTwinController> {
@@ -25,47 +27,66 @@ namespace StructuraSystems::Server {
         ADD_METHOD_TO(DigitalTwinController::getTwinData, "/project/{1:projectId}/twins/{2:tagId}/data", drogon::Get, "StructuraSystems::Server::JwtFilter");
         METHOD_LIST_END
 
-        void getAllTwins(const drogon::HttpRequestPtr &, std::function<void(const drogon::HttpResponsePtr&)>&& callback, const std::string& projectId) {
-            const auto project = ProjectNavigationService->getProjectById(boost::uuids::string_generator()(projectId));
-
-            if (project==nullptr)
-            {
-                const auto response = drogon::HttpResponse::newHttpResponse(drogon::k404NotFound, drogon::CT_APPLICATION_JSON);
-                callback(response);
+        void getAllTwins(const drogon::HttpRequestPtr &request, std::function<void(const drogon::HttpResponsePtr&)>&& callback, const std::string& projectId) {
+            const auto project = withProject(request, projectId, ProjectAccess::Read, callback);
+            if (!project)
                 return;
-            }
 
             const auto twins = DTService->getAllTwinsForProject(project);
 
-            std::string returnValue = "[\r\n";
-            for (size_t i = 0; i < twins.size(); i++)
-            {
-                returnValue += twins[i]->serializeToJson();
-                if (i < (twins.size() - 1))
-                    returnValue += ",\r\n";
-            }
-            returnValue += "]";
-
-            const auto response = drogon::HttpResponse::newHttpResponse(drogon::k200OK, drogon::CT_APPLICATION_JSON);
-            response->setBody(returnValue);
-            callback(response);
+            callback(paginate(request, twins,
+                [](const std::shared_ptr<TwinResponse>& twin) { return boost::uuids::to_string(twin->getId()); },
+                [](const std::shared_ptr<TwinResponse>& twin) { return twin->serializeToJson(); }));
         }
 
         void postTwin(const drogon::HttpRequestPtr & request, std::function<void(const drogon::HttpResponsePtr&)>&& callback, const std::string& projectId) {
-            const std::string json = request->getJsonObject()->toStyledString();
-            const std::shared_ptr<TwinRequest> twinRequest = std::make_shared<TwinRequest>(json);
-            const auto project = ProjectNavigationService->getProjectById(boost::uuids::string_generator()(projectId));
-            const auto commit = ProjectVerService->getCommitById(project,twinRequest->referencedCommit()->getId());
-            const auto newDigitalTwin = DTService->createTwin(twinRequest->name(), project,commit);
+            const auto project = withProject(request, projectId, ProjectAccess::Write, callback);
+            if (!project)
+                return;
+
+            const auto jsonObject = requireJson(request);
+            if (jsonObject == nullptr)
+            {
+                callback(jsonError(drogon::k400BadRequest, "Missing or invalid JSON body."));
+                return;
+            }
+
+            std::shared_ptr<TwinRequest> twinRequest;
+            std::string twinName;
+            std::shared_ptr<SysMLv2::REST::Commit> referencedCommit;
+            try {
+                twinRequest = std::make_shared<TwinRequest>(jsonObject->toStyledString());
+                twinName = twinRequest->name();
+                referencedCommit = twinRequest->referencedCommit();
+            } catch (...) {
+                twinRequest = nullptr;
+            }
+            if (twinRequest == nullptr || twinName.empty() || referencedCommit == nullptr)
+            {
+                callback(jsonError(drogon::k400BadRequest, "Invalid twin request."));
+                return;
+            }
+
+            const auto commit = ProjectVerService->getCommitById(project,referencedCommit->getId());
+            if (commit == nullptr)
+            {
+                callback(jsonError(drogon::k404NotFound, "Commit not found."));
+                return;
+            }
+
+            const auto newDigitalTwin = DTService->createTwin(twinName, project,commit);
 
             const auto response = drogon::HttpResponse::newHttpResponse(drogon::k201Created, drogon::CT_APPLICATION_JSON);
             response->setBody(newDigitalTwin->serializeToJson());
             callback(response);
         }
 
-        void getTwinData([[maybe_unused]] const drogon::HttpRequestPtr & request, std::function<void(const drogon::HttpResponsePtr&)>&& callback, [[maybe_unused]] const std::string& projectId, [[maybe_unused]] const std::string& tagId) {
-            const auto response = drogon::HttpResponse::newHttpResponse(drogon::k501NotImplemented, drogon::CT_APPLICATION_JSON);
-            callback(response);
+        void getTwinData(const drogon::HttpRequestPtr & request, std::function<void(const drogon::HttpResponsePtr&)>&& callback, const std::string& projectId, [[maybe_unused]] const std::string& tagId) {
+            const auto project = withProject(request, projectId, ProjectAccess::Read, callback);
+            if (!project)
+                return;
+
+            callback(jsonError(drogon::k501NotImplemented, "Not implemented."));
         }
 
     private:

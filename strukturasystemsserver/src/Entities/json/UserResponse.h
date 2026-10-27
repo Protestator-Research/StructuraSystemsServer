@@ -18,6 +18,7 @@ namespace StructuraSystems::Server {
         std::string Username;
         std::string Group;
         int UserRole;
+        bool MustChangePassword = false;
     };
 } // StructuraSystems::Server
 
