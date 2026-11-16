@@ -33,7 +33,13 @@
       "_login_max_requests_per_ip": "Login requests per client IP within the window. Default 20.",
       "login_max_requests_per_ip": 20,
       "_login_ip_window_seconds": "Window for the per-IP limit. Default 60.",
-      "login_ip_window_seconds": 60
+      "login_ip_window_seconds": 60,
+      "_api_token_default_lifetime_days": "Lifetime of a new API token if the request has no expiresInDays. Default 90.",
+      "api_token_default_lifetime_days": 90,
+      "_api_token_max_lifetime_days": "Upper limit for expiresInDays of API tokens; values above 365 are capped at 365. Default 365.",
+      "api_token_max_lifetime_days": 365,
+      "_api_token_max_count": "Highest number of API tokens that exist at the same time; further requests answer 409. Default 200.",
+      "api_token_max_count": 200
     },
     "log": {
       "log_path": "./",

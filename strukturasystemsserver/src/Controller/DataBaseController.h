@@ -12,7 +12,9 @@
 #include <mongocxx/database.hpp>
 #include <mongocxx/pool.hpp>
 #include <mongocxx/uri.hpp>
+#include <cstdint>
 #include "../Entities/db/User.hpp"
+#include "../Entities/db/ApiToken.hpp"
 
 namespace SysMLv2::REST
 {
@@ -85,6 +87,15 @@ namespace StructuraSystems::Server
 		void removeUser(std::string username);
 		void changeUser(const User& user);
 
+		void addApiToken(const ApiToken& token);
+		std::vector<ApiToken> getAllApiTokens();
+		/// Returns false if no token with the id exists.
+		bool removeApiToken(const std::string& id);
+		/// Deletes all tokens with expiresAt < now (the caller passes the retention cutoff) and returns their number.
+		std::int64_t removeExpiredApiTokens(std::int64_t now);
+		void updateApiTokenLastUsed(const std::string& id, std::int64_t lastUsedAt);
+		void updateApiTokenProjects(const std::string& id, const std::vector<std::string>& projects);
+
 	private:
 		DataBaseController(std::string dBAddress, std::string username, std::string password, std::string databaseName, bool tls);
 
@@ -104,6 +115,7 @@ namespace StructuraSystems::Server
 		std::string DatabaseName;
 
 		void initializeDatabaseIfNotAvailable();
+		void createApiTokenCollection();
 		bool checkDatabaseState();
 
 		void deleteDatabaseIfDebug();
@@ -119,6 +131,7 @@ namespace StructuraSystems::Server
 		const std::string USER_COLLECTION_IDENTIFIER = "users";
 		const std::string DIGITAL_TWIN_COLLECTION_IDENTIFIER = "digital_twins";
 		const std::string VERSION_COLLECTION_IDENTIFIER = "versions";
+		const std::string API_TOKEN_COLLECTION_IDENTIFIER = "api_tokens";
 	};
 }
 

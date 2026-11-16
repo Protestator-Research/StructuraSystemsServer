@@ -1,9 +1,12 @@
 #include "AuthenticationService.h"
 
+#include <algorithm>
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
 #include <mutex>
+#include <stdexcept>
+#include <string>
 #include <sodium.h>
 
 #include "../Controller/DataBaseController.h"
@@ -136,7 +139,24 @@ namespace StructuraSystems::Server {
 		return user.has_value() && user->role() == USER_ROLE::GLOBAL_ADMINISTRATOR;
 	}
 
+	std::optional<AuthContext> AuthenticationService::authenticate(const std::string& bearerToken) {
+		if (bearerToken.compare(0, 4, ApiTokenStore::TOKEN_PREFIX) == 0) {
+			auto token = ApiTokens.validate(bearerToken);
+			if (!token)
+				return std::nullopt;
+			return AuthContext::forApiToken(std::move(*token));
+		}
+
+		auto user = getUserFromDatabase(bearerToken);
+		if (!user)
+			return std::nullopt;
+		return AuthContext::forSession(std::move(*user));
+	}
+
 	std::optional<User> AuthenticationService::getUserFromDatabase(std::string bearerToken) {
+		// An API token is never a session.
+		if (bearerToken.compare(0, 4, ApiTokenStore::TOKEN_PREFIX) == 0)
+			return std::nullopt;
 		const auto username = Sessions.validate(bearerToken);
 		if (!username)
 			return std::nullopt;
@@ -248,4 +268,37 @@ namespace StructuraSystems::Server {
 	void AuthenticationService::purgeExpiredSessions() {
 		Sessions.purgeExpired();
 	}
+
+	CreatedApiToken AuthenticationService::createApiToken(const std::string& name, ApiTokenTarget targetType, std::vector<std::string> projects,
+		const std::string& group, ApiTokenScope scope, const std::string& createdBy, std::optional<std::int64_t> expiresInDays) {
+		const auto& config = ServerConfig::get();
+		const auto maxDays = std::min<std::int64_t>(config.ApiTokenMaxLifetimeDays, 365);
+		const auto days = expiresInDays.value_or(std::min(config.ApiTokenDefaultLifetimeDays, maxDays));
+		if (days < 1 || days > maxDays)
+			throw std::invalid_argument("expiresInDays must be between 1 and " + std::to_string(maxDays));
+
+		// The test-only override can only shorten the lifetime.
+		std::int64_t lifetimeSeconds = days * 86400;
+		if (config.ApiTokenLifetimeOverrideSeconds > 0)
+			lifetimeSeconds = std::min<std::int64_t>(lifetimeSeconds, config.ApiTokenLifetimeOverrideSeconds);
+		return ApiTokens.create(name, targetType, std::move(projects), group, scope, createdBy, lifetimeSeconds, config.ApiTokenMaxCount);
+	}
+
+	std::vector<ApiToken> AuthenticationService::listApiTokens() const { return ApiTokens.list(); }
+
+	std::optional<ApiToken> AuthenticationService::findApiToken(const std::string& id) const { return ApiTokens.findById(id); }
+
+	ApiTokenRevokeResult AuthenticationService::revokeApiToken(const std::string& id) { return ApiTokens.revoke(id); }
+
+	bool AuthenticationService::isApiTokenExpired(const ApiToken& token) const { return ApiTokens.isExpired(token); }
+
+	std::vector<std::string> AuthenticationService::pendingApiTokenRevocations() const { return ApiTokens.pendingRevocations(); }
+
+	void AuthenticationService::retryPendingApiTokenRevocations() { ApiTokens.retryPendingRevocations(); }
+
+	std::size_t AuthenticationService::removeProjectFromApiTokens(const std::string& projectId) { return ApiTokens.removeProject(projectId); }
+
+	void AuthenticationService::flushApiTokenLastUsed() { ApiTokens.flushLastUsed(); }
+
+	std::size_t AuthenticationService::purgeExpiredApiTokens() { return ApiTokens.purgeExpired(); }
 }

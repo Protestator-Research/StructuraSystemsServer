@@ -6,7 +6,7 @@
 mongodump --db structura_systems --out <backup-verzeichnis>
 ```
 
-Beim ersten Start migriert der Server die Datenbank automatisch (Schema-Version 1 auf 2 und 2 auf 3). Die Version steht in der Collection `schema`, Dokument `{_id: "schema", version: 3}`. Eine neu angelegte Datenbank erhaelt direkt Version 3. Die Aenderungen von Version 3 stehen im Abschnitt "Konformitaet zur Systems Modeling API (REST/HTTP-PSM)" weiter unten.
+Beim ersten Start migriert der Server die Datenbank automatisch (Schema-Version 1 auf 2, 2 auf 3 und 3 auf 4). Die Version steht in der Collection `schema`, Dokument `{_id: "schema", version: 4}`. Eine neu angelegte Datenbank erhaelt direkt Version 4. Die Aenderungen von Version 3 stehen im Abschnitt "Konformitaet zur Systems Modeling API (REST/HTTP-PSM)" weiter unten, die von Version 4 im Abschnitt "API-Tokens".
 
 ## Was die Migration 1 -> 2 aendert
 
@@ -18,7 +18,7 @@ Die Migration ist idempotent und nutzt nur gezielte Updates, keine vollstaendige
 4. Jeder Benutzer, dessen Passwort `admin` lautet, erhaelt `mustChangePassword: true` und wird als Warnung geloggt.
 5. Erst wenn alle Schritte erfolgreich waren, wird `schema.version = 2` geschrieben.
 
-Schlaegt ein Schritt fehl, loggt der Server `[migration] FAILED: ...` und beendet sich mit Fehlercode. Ist die Datenbank neuer als das Binary (Version groesser 3), startet der Server ebenfalls nicht.
+Schlaegt ein Schritt fehl, loggt der Server `[migration] FAILED: ...` und beendet sich mit Fehlercode. Ist die Datenbank neuer als das Binary (Version groesser 4), startet der Server ebenfalls nicht.
 
 ## Projekte ohne Eigentuemer
 
@@ -139,6 +139,105 @@ Bestehende Commits behalten ihren Inhalt. Weil sie bisher den Vollstand enthielt
 ### Bibliothek
 
 Der Server benoetigt `sysmllib/2610.3` (statt 2610.2). Die Versionierungslogik (`versionedData`, Commit-Pruefung, Diff, Merge, Query-Auswertung) liegt in der Bibliothek, Namespace `SysMLv2::REST::Versioning`. Nach dem Wechsel `conan install . -s build_type=Debug --build missing` ausfuehren.
+
+## API-Tokens
+
+Anwendungen (Skripte, CI-Jobs, Werkzeuge) melden sich mit einem eigenen, einzeln widerrufbaren Token an der API an, ohne Benutzerkonto und Passwort: `Authorization: Bearer sst_...`. Ein Administrator stellt das Token fuer genau ein Ziel aus. Das Token ist eine eigene Identitaet und kein Stellvertreter eines Benutzers; seine Rechte ergeben sich aus Ziel und Zugriffsart. Der Entwurf steht in [API_TOKEN_PLAN.md](API_TOKEN_PLAN.md).
+
+### Schema 4 und Migration
+
+`CURRENT_SCHEMA_VERSION` ist 4. Die Migration 3 -> 4 laeuft beim ersten Start automatisch, ist idempotent und schreibt die Version erst nach Erfolg:
+
+- Die neue Collection `api_tokens` wird angelegt, mit eindeutigen Indizes auf `tokenHash` und auf `name`.
+- Bestehende Daten (Projekte, Benutzer, Commits, ...) werden nicht veraendert. Eine neue Datenbank erhaelt Collection und Indizes direkt.
+- Gespeichert wird nur der SHA-256-Hash des Tokens, nie der Klartext.
+
+Rollback auf ein Binary mit Schema 3: Das alte Binary startet nicht, solange `schema.version` 4 ist. Weil nur eine Collection hinzukommt, genuegt es, die Version zurueckzusetzen (`db.schema.updateOne({_id: "schema"}, {$set: {version: 3}})`); die Collection `api_tokens` wird vom alten Binary ignoriert und kann bei Bedarf geloescht werden. Solange das alte Binary laeuft, sind die Tokens ungueltig. **Bleibt `api_tokens` erhalten, werden beim naechsten Upgrade auf Schema 4 alle noch nicht abgelaufenen Tokens wieder gueltig.** Sollen sie ungueltig bleiben, beim Rollback die Collection `api_tokens` loeschen (`db.api_tokens.drop()`). Sicherer bleibt der Weg ueber das Backup (siehe "Rollback").
+
+### Endpunkte
+
+Alle Endpunkte sind nur mit der Login-Sitzung eines `GLOBAL_ADMINISTRATOR` erreichbar. Andere Rollen erhalten 403 `{"error":"Insufficient permissions."}`, ein API-Token 403 `{"error":"session_required"}`, ein Administrator mit offenem Passwortwechsel 403 `{"error":"password_change_required"}`.
+
+| Methode | Pfad | Antwort |
+|---|---|---|
+| `POST` | `/admin/tokens` | 201 mit den Metadaten und einmalig `token`; 400 ungueltige Eingabe oder unbekanntes Projekt (auch Bibliotheksprojekte), 409 Name vergeben oder Hoechstzahl erreicht (abgelaufene Tokens zaehlen nicht zur Hoechstzahl; der Name eines abgelaufenen Tokens darf wiederverwendet werden) |
+| `GET` | `/admin/tokens` | alle Tokens, auch abgelaufene (paginiert wie die uebrigen Listen), ohne Klartext und ohne Hash |
+| `GET` | `/admin/tokens/{id}` | ein Token, 404 wenn unbekannt oder keine gueltige UUID |
+| `DELETE` | `/admin/tokens/{id}` | 204, der Widerruf wirkt sofort; 404 wenn unbekannt oder keine gueltige UUID; 503 `{"error":"Token revoked for this server process; the database delete failed and will be retried."}`, wenn das Token zwar in diesem Serverprozess sofort ungueltig ist, das Loeschen in MongoDB aber fehlschlug (es wird wiederholt, ein erneutes `DELETE` versucht es ebenfalls) |
+
+Anfrage:
+
+```
+POST /admin/tokens
+{
+  "name": "ci-importer",
+  "target": { "type": "project", "projects": ["<uuid>", "<uuid>"] },
+  "scope": "read_write",
+  "expiresInDays": 90
+}
+```
+
+- `name`: Pflicht, serverweit eindeutig, `^[A-Za-z0-9 ._-]{1,64}$`.
+- `target.type`: Pflicht, `project`, `group` oder `server`. `projects` (1 bis 50 vorhandene, keine Bibliotheksprojekte, ohne Duplikate) nur und zwingend bei `project`; `group` (`^[A-Za-z0-9._-]{1,64}$`) nur und zwingend bei `group`; bei `server` keine weiteren Felder.
+- `scope`: Pflicht, `read` oder `read_write` (kein Standardwert).
+- `expiresInDays`: optional, ganze Zahl von 1 bis `api_token_max_lifetime_days` (hoechstens 365; Standard 90, siehe Konfiguration), sonst 400. Tokens laufen immer ab.
+
+Antwort (201), die Antwort traegt `Cache-Control: no-store`:
+
+```
+{
+  "id": "3f0c8d2e-...",
+  "name": "ci-importer",
+  "target": { "type": "project", "projects": ["<uuid>", "<uuid>"] },
+  "scope": "read_write",
+  "createdBy": "admin",
+  "createdAt": 1767000000,
+  "expiresAt": 1774776000,
+  "lastUsedAt": 0,
+  "expired": false,
+  "token": "sst_...."
+}
+```
+
+Die Zeiten sind Unix-Sekunden, `lastUsedAt` 0 bedeutet "nie benutzt". `expired` ist `true`, sobald `expiresAt` erreicht ist; abgelaufene Tokens authentifizieren nicht mehr, bleiben aber in Liste und Detail sichtbar (siehe Lebenszyklus). **Der Klartext (`token`, 47 Zeichen: `sst_` und 43 Zeichen URL-sicheres Base64) steht nur in dieser einen Antwort** und ist danach nirgends mehr abrufbar. `GET` liefert dieselben Felder ohne `token`. Ausstellen und Widerruf werden mit Token-Id, Name, Ziel und handelndem Administrator (nie mit dem Token) als `[audit]`-Zeile auf stdout protokolliert.
+
+### Rechte je Ziel
+
+| Ziel | Lesen / Schreiben | `GET /projects` | `POST /projects` | `DELETE /projects/{id}` |
+|---|---|---|---|---|
+| `project` | nur die aufgefuehrten Projekte | nur diese | 403 | 403 |
+| `group` | Projekte, deren `owningGroup` die Gruppe ist | nur diese | 201; `owningGroup` ist die Gruppe des Tokens, kein `owner` | 403 |
+| `server` | alle Projekte, auch Bibliotheksprojekte | alle | 201; ohne `owner` und ohne `owningGroup` | erlaubt |
+
+- Ein vom Client mitgeschickter `owner` oder `owningGroup` wird bei Token-Anfragen ignoriert.
+- Nicht erlaubte Projekte antworten wie unbekannte mit 404 (keine Aufzaehlung). `DELETE` auf ein lesbares Projekt, das das Token nicht loeschen darf, antwortet 403.
+- Von einem Server-Token angelegte Projekte haben keinen Eigentuemer und sind damit nur fuer Administratoren und Server-Tokens sichtbar, bis ein Administrator sie zuweist.
+- Bibliotheksprojekte sind nur fuer Server-Tokens lesbar; ein Projekt-Token kann nicht auf eines ausgestellt werden.
+
+### Zugriffsart
+
+- `read`: nur `GET` und `HEAD`, zusaetzlich `POST /projects/{id}/query-results` (lesende Abfrage). Jede andere schreibende Methode (Commit, Branch, Tag, `PUT`, gespeicherte Query, `DELETE`, Projekt anlegen) antwortet 403 `{"error":"insufficient_scope"}`.
+- `read_write`: alle Methoden, soweit das Ziel es erlaubt (Tabelle oben).
+
+### Nur fuer Login-Sitzungen
+
+Kein Token, auch kein Server-Token mit `read_write`, erreicht `/admin/*` (Benutzer- und Token-Verwaltung), `/groups/*`, `/me` und `/me/*` sowie `PUT /projects/{id}/owner`. Die Antwort ist 403 `{"error":"session_required"}`, unabhaengig von der Zugriffsart. Die Pruefung erfolgt im Filter auf dem Pfad, Gross-/Kleinschreibung und doppelte Schraegstriche spielen keine Rolle; nicht kanonische Pfade (`//`, `.`, `..`, `%`) werden fuer Tokens mit 403 `{"error":"insufficient_scope"}` abgelehnt. Sonst koennte ein geleaktes Server-Token Administratoren anlegen oder sich selbst verlaengern.
+
+### Lebenszyklus
+
+| Ereignis | Wirkung |
+|---|---|
+| Ablaufdatum erreicht | Token sofort ungueltig (401), `expired: true` in Liste und Detail. Es bleibt 30 Tage nach Ablauf erhalten (eine falsch gehende Systemuhr soll keine Tokens loeschen); danach loescht das Housekeeping (alle 5 Minuten) es aus Speicher und Datenbank. Ein Widerruf funktioniert wie bei jedem Token. Der Name ist schon vorher wieder frei: Beim Ausstellen mit diesem Namen wird das abgelaufene Token geloescht. Abgelaufene Tokens zaehlen nicht zu `api_token_max_count` |
+| `DELETE /admin/tokens/{id}` | sofort ungueltig (401), auch wenn MongoDB gerade nicht erreichbar ist (dann 503, das Loeschen in der Datenbank wird wiederholt: Housekeeping, beim Beenden, erneutes `DELETE`). War das Loeschen beim Ende des Prozesses noch offen, ist das Token nach dem Neustart wieder gueltig und muss erneut widerrufen werden (der Server warnt dann beim Beenden mit den Ids) |
+| Projekt geloescht | Das Projekt wird aus den Listen der Projekt-Tokens entfernt; ein Token ohne verbleibendes Projekt wird geloescht |
+| Ausstellender Administrator geloescht oder herabgestuft | keine Wirkung, `createdBy` bleibt als Vermerk. Jeder Administrator kann das Token widerrufen |
+| Passwort eines Benutzers geaendert (auch des Ausstellers) | keine Wirkung auf Tokens |
+| Gruppe hat keine Mitglieder mehr | keine Wirkung, Gruppen sind nur Namen an Benutzern und Projekten |
+| Neustart des Servers | Tokens bleiben gueltig (liegen in MongoDB), Login-Sitzungen nicht |
+
+### Neue Konfiguration
+
+Optionale Schluessel in `custom_config` (siehe [DEPLOYMENT.md](DEPLOYMENT.md)): `api_token_default_lifetime_days` (90), `api_token_max_lifetime_days` (365, hoechstens 365), `api_token_max_count` (200).
 
 ## Schutz vor Datenverlust
 

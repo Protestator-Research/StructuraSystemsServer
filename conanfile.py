@@ -26,12 +26,12 @@ class CppStructuraSystemsRecipe(ConanFile):
     exports_sources = "CMakeLists.txt", "*"
 
     def requirements(self):
-        self.requires("boost/[>=1.89.0 <2]")
+        self.requires("boost/[>=1.89.0 <=2]", force=True)
         self.requires("libcurl/[>=8.4.0 <9]")
         self.requires("nlohmann_json/[>=3.11.3 <3.13]")
         self.requires("snappy/1.2.1", override=True)
-        self.requires("sysmllib/2610.2")
-        self.requires("openssl/3.6.3")
+        self.requires("sysmllib/2611.1")
+        self.requires("openssl/3.6.5")
         self.requires("mongo-cxx-driver/4.6.0")
         self.requires("libsodium/1.0.20")
         self.requires("drogon/1.9.13")

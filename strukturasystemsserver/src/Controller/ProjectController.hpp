@@ -30,19 +30,24 @@ namespace StructuraSystems::Server
 		METHOD_LIST_END
 
 		void getProjects(const drogon::HttpRequestPtr &req, std::function<void(const drogon::HttpResponsePtr&)>&& callback) const {
-			const auto user = currentUser(req);
-			if (!user)
+			const auto principal = currentPrincipal(req);
+			if (!principal)
 			{
 				callback(jsonError(drogon::k401Unauthorized, "Not authenticated."));
 				return;
 			}
 
-			// The projects of the user, in the order of their id.
+			// The projects of the user or of the API token, in the order of their id.
 			std::vector<std::shared_ptr<Project>> accessible;
 			for (const auto& entry : _ProjectService->getProjects())
 			{
 				const auto project = std::dynamic_pointer_cast<Project>(entry);
-				if (project != nullptr && canAccessProject(*user, project, ProjectAccess::Read))
+				if (project == nullptr)
+					continue;
+				const bool allowed = principal->isSession()
+					? canAccessProject(*principal->user(), project, ProjectAccess::Read)
+					: canTokenAccessProject(*principal->apiToken(), project, ProjectAccess::Read);
+				if (allowed)
 					accessible.push_back(project);
 			}
 			callback(paginate(req, accessible,
@@ -61,9 +66,26 @@ namespace StructuraSystems::Server
 		}
 
 		void deleteProjectWithId(const drogon::HttpRequestPtr &req, std::function<void(const drogon::HttpResponsePtr&)>&& callback, const std::string& projectId) const {
-			const auto existingProject = withProject(req, projectId, ProjectAccess::Delete, callback);
-			if (!existingProject)
-				return;
+			const auto principal = currentPrincipal(req);
+			std::shared_ptr<Project> existingProject;
+			if (principal && principal->isApiToken())
+			{
+				// A token that may read the project but not delete it is told so (403); one that can not read it gets the 404.
+				existingProject = withProject(req, projectId, ProjectAccess::Read, callback);
+				if (!existingProject)
+					return;
+				if (!canTokenAccessProject(*principal->apiToken(), existingProject, ProjectAccess::Delete))
+				{
+					callback(jsonError(drogon::k403Forbidden, "Insufficient permissions."));
+					return;
+				}
+			}
+			else
+			{
+				existingProject = withProject(req, projectId, ProjectAccess::Delete, callback);
+				if (!existingProject)
+					return;
+			}
 
 			const auto project = _ProjectService->deleteProject(existingProject->getId());
 			if (project==nullptr)
@@ -78,10 +100,15 @@ namespace StructuraSystems::Server
 		}
 
 		void createProject(const drogon::HttpRequestPtr &request, std::function<void(const drogon::HttpResponsePtr&)>&& callback) const {
-			const auto user = currentUser(request);
-			if (!user)
+			const auto principal = currentPrincipal(request);
+			if (!principal)
 			{
 				callback(jsonError(drogon::k401Unauthorized, "Not authenticated."));
+				return;
+			}
+			if (principal->isApiToken() && !canTokenCreateProject(*principal->apiToken()))
+			{
+				callback(jsonError(drogon::k403Forbidden, "This API token may not create projects."));
 				return;
 			}
 
@@ -93,8 +120,9 @@ namespace StructuraSystems::Server
 			}
 			const auto& requestObject = *jsonObject;
 
-			// The owner is always the authenticated user; a client supplied owner is ignored.
-			const auto owner = user->username();
+			// The owner is always the authenticated user; a client supplied owner is ignored. An API token is no user: its
+			// projects have no owner.
+			const std::string owner = principal->isSession() ? principal->user()->username() : std::string();
 			std::string group = request->getParameter("owningGroup");
 
 			std::string name;
@@ -128,10 +156,19 @@ namespace StructuraSystems::Server
 				return;
 			}
 
-			if (!mayUseGroup(*user, group))
+			if (principal->isSession())
 			{
-				callback(jsonError(drogon::k403Forbidden, "You are not a member of the owning group."));
-				return;
+				if (!mayUseGroup(*principal->user(), group))
+				{
+					callback(jsonError(drogon::k403Forbidden, "You are not a member of the owning group."));
+					return;
+				}
+			}
+			else
+			{
+				// A group token creates projects of its group, a server token projects without group; a client supplied
+				// group is ignored like the owner.
+				group = principal->apiToken()->targetType() == ApiTokenTarget::GROUP ? principal->apiToken()->group() : std::string();
 			}
 
 			const auto newProject = _ProjectService->createProject(name, description, owner, group);
@@ -220,6 +257,14 @@ namespace StructuraSystems::Server
 		}
 
 		void changeOwner(const drogon::HttpRequestPtr &request, std::function<void(const drogon::HttpResponsePtr&)>&& callback, const std::string& projectId) const {
+			// Only login sessions change owners (the JwtFilter answers an API token before; this is the second line).
+			const auto principal = currentPrincipal(request);
+			if (principal && !principal->isSession())
+			{
+				callback(jsonError(drogon::k403Forbidden, "session_required"));
+				return;
+			}
+
 			User user;
 			const auto project = withProject(request, projectId, ProjectAccess::Delete, callback, &user);
 			if (!project)

@@ -4,10 +4,13 @@
 #include "../Entities/db/Version.hpp"
 #include "../Entities/db/Project.hpp"
 #include "DatabaseMigrator.h"
+#include "../Entities/db/ApiToken.hpp"
 
+#include <bsoncxx/builder/basic/array.hpp>
 #include <bsoncxx/builder/basic/document.hpp>
 #include <bsoncxx/builder/stream/document.hpp>
 #include <bsoncxx/json.hpp>
+#include <mongocxx/options/index.hpp>
 #include <nlohmann/json.hpp>
 #include <cctype>
 #include <vector>
@@ -613,6 +616,100 @@ namespace StructuraSystems::Server
 	}
 
 
+	void DataBaseController::addApiToken(const ApiToken& token)
+	{
+		auto client = Pool.acquire();
+		auto database = (*client)[DatabaseName];
+		using bsoncxx::builder::basic::kvp;
+		// Built directly: from_json would store the timestamps as Int32 where they fit.
+		bsoncxx::builder::basic::document document;
+		document.append(kvp("_id", token.id()), kvp("tokenHash", token.tokenHash()), kvp("name", token.name()),
+			kvp("targetType", toString(token.targetType())));
+		if (token.targetType() == ApiTokenTarget::PROJECT) {
+			bsoncxx::builder::basic::array projects;
+			for (const auto& project : token.projects())
+				projects.append(project);
+			document.append(kvp("projects", projects.extract()));
+		}
+		if (token.targetType() == ApiTokenTarget::GROUP)
+			document.append(kvp("group", token.group()));
+		document.append(kvp("scope", toString(token.scope())), kvp("createdBy", token.createdBy()),
+			kvp("createdAt", static_cast<std::int64_t>(token.createdAt())),
+			kvp("expiresAt", static_cast<std::int64_t>(token.expiresAt())),
+			kvp("lastUsedAt", static_cast<std::int64_t>(token.lastUsedAt())));
+		database[API_TOKEN_COLLECTION_IDENTIFIER].insert_one(document.view());
+	}
+
+	std::vector<ApiToken> DataBaseController::getAllApiTokens()
+	{
+		auto client = Pool.acquire();
+		auto database = (*client)[DatabaseName];
+		std::vector<ApiToken> returnValue;
+		std::size_t skipped = 0;
+		for (auto&& doc : database[API_TOKEN_COLLECTION_IDENTIFIER].find({}))
+		{
+			try {
+				returnValue.emplace_back(bsoncxx::to_json(doc));
+			}
+			catch (const std::exception& e) {
+				// Only the _id, never the document (it holds the token hash).
+				++skipped;
+				const auto idElement = doc["_id"];
+				const std::string id = idElement && idElement.type() == bsoncxx::type::k_string ? std::string(idElement.get_string().value) : "<not a string>";
+				std::cerr << "[api_tokens] The stored token with _id " << id << " could not be read and is skipped: " << e.what() << std::endl;
+			}
+		}
+		std::cout << returnValue.size() << " API tokens loaded from Database." << std::endl;
+		if (skipped > 0)
+			std::cerr << "[api_tokens] WARNING: " << skipped << " stored API token document(s) could not be loaded and were skipped." << std::endl;
+		return returnValue;
+	}
+
+	bool DataBaseController::removeApiToken(const std::string& id)
+	{
+		auto client = Pool.acquire();
+		auto database = (*client)[DatabaseName];
+		const auto result = database[API_TOKEN_COLLECTION_IDENTIFIER].delete_one(
+			bsoncxx::builder::basic::make_document(bsoncxx::builder::basic::kvp("_id", id)));
+		return result.has_value() && result->deleted_count() > 0;
+	}
+
+	std::int64_t DataBaseController::removeExpiredApiTokens(std::int64_t now)
+	{
+		auto client = Pool.acquire();
+		auto database = (*client)[DatabaseName];
+		using bsoncxx::builder::basic::kvp;
+		using bsoncxx::builder::basic::make_document;
+		const auto result = database[API_TOKEN_COLLECTION_IDENTIFIER].delete_many(
+			make_document(kvp("expiresAt", make_document(kvp("$lt", now)))));
+		return result.has_value() ? result->deleted_count() : 0;
+	}
+
+	void DataBaseController::updateApiTokenLastUsed(const std::string& id, std::int64_t lastUsedAt)
+	{
+		auto client = Pool.acquire();
+		auto database = (*client)[DatabaseName];
+		using bsoncxx::builder::basic::kvp;
+		using bsoncxx::builder::basic::make_document;
+		database[API_TOKEN_COLLECTION_IDENTIFIER].update_one(
+			make_document(kvp("_id", id)),
+			make_document(kvp("$set", make_document(kvp("lastUsedAt", lastUsedAt)))));
+	}
+
+	void DataBaseController::updateApiTokenProjects(const std::string& id, const std::vector<std::string>& projects)
+	{
+		auto client = Pool.acquire();
+		auto database = (*client)[DatabaseName];
+		using bsoncxx::builder::basic::kvp;
+		using bsoncxx::builder::basic::make_document;
+		bsoncxx::builder::basic::array array;
+		for (const auto& project : projects)
+			array.append(project);
+		database[API_TOKEN_COLLECTION_IDENTIFIER].update_one(
+			make_document(kvp("_id", id)),
+			make_document(kvp("$set", make_document(kvp("projects", array.extract())))));
+	}
+
 	DataBaseController* DataBaseController::createInstance(std::string dbAddress, std::string username, std::string password, std::string databaseName, bool tls)
 	{
 		// std::call_once makes the creation thread safe. If the constructor throws, the flag stays
@@ -692,6 +789,8 @@ namespace StructuraSystems::Server
 		database.create_collection(DIGITAL_TWIN_COLLECTION_IDENTIFIER);
 		database.create_collection(VERSION_COLLECTION_IDENTIFIER);
 
+		// Before the version entry: a failed index creation must not leave a database that the next start accepts as initialised.
+		createApiTokenCollection();
 		addVersionToDatabase();
 
 		std::vector<std::shared_ptr<Project>> projects = {
@@ -832,6 +931,18 @@ namespace StructuraSystems::Server
 		addMultibleCommits(commitProjectMap);
 		addMultibleDataVersions(commitIdDataVersionMap);
 		addMultibleElements(commitIdElementsMap);
+	}
+
+	void DataBaseController::createApiTokenCollection()
+	{
+		auto client = Pool.acquire();
+		auto database = (*client)[DatabaseName];
+		database.create_collection(API_TOKEN_COLLECTION_IDENTIFIER);
+		auto collection = database[API_TOKEN_COLLECTION_IDENTIFIER];
+		mongocxx::options::index unique;
+		unique.unique(true);
+		collection.create_index(bsoncxx::builder::basic::make_document(bsoncxx::builder::basic::kvp("tokenHash", 1)), unique);
+		collection.create_index(bsoncxx::builder::basic::make_document(bsoncxx::builder::basic::kvp("name", 1)), unique);
 	}
 
 	bool DataBaseController::checkDatabaseState() {

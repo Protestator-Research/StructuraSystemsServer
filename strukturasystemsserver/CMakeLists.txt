@@ -42,10 +42,14 @@ set(SOURCES
         src/Services/AccessControlService.cpp
         src/Services/SessionStore.h
         src/Services/SessionStore.cpp
+        src/Services/ApiTokenStore.h
+        src/Services/AuthContext.h
+        src/Services/ApiTokenStore.cpp
         src/Services/LoginThrottle.h
         src/Services/LoginThrottle.cpp
         src/Services/ServerConfig.h
         src/Controller/GroupController.hpp
+        src/Controller/ApiTokenController.hpp
         src/Controller/Helper/ProjectAccessHelper.hpp
         src/Controller/DigitalTwinController.hpp
         src/Entities/json/TwinResponse.cpp
@@ -58,10 +62,15 @@ set(SOURCES
         src/Services/DigitalTwinService.h
         src/Filter/JwtFilter.hpp
         src/Entities/db/User.hpp
+        src/Entities/db/ApiToken.hpp
         src/Entities/json/UserRequest.cpp
         src/Entities/json/UserRequest.h
         src/Entities/json/UserResponse.cpp
         src/Entities/json/UserResponse.h
+        src/Entities/json/ApiTokenRequest.cpp
+        src/Entities/json/ApiTokenRequest.h
+        src/Entities/json/ApiTokenResponse.cpp
+        src/Entities/json/ApiTokenResponse.h
         src/Controller/VersionController.cpp
         src/Controller/VersionController.h
         src/Controller/Helper/version.h.in

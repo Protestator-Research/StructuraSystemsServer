@@ -5,11 +5,14 @@
 #include <optional>
 #include <shared_mutex>
 #include <stdexcept>
+#include <cstdint>
 #include <string>
 #include <map>
 #include <vector>
 
 #include "../Entities/db/User.hpp"
+#include "ApiTokenStore.h"
+#include "AuthContext.h"
 #include "SessionStore.h"
 
 namespace StructuraSystems::Server
@@ -41,10 +44,14 @@ namespace StructuraSystems::Server
 		/// on a database failure the in-memory state stays unchanged.
 		void addUser(std::string username, std::string password, USER_ROLE role = USER_ROLE::USER, std::string group = "", bool mustChangePassword = false);
 
+		/// Resolves the bearer token of a request: "sst_..." goes to the API tokens, everything else to the login sessions.
+		/// Unknown, expired and revoked tokens (and sessions of deleted users) give std::nullopt.
+		std::optional<AuthContext> authenticate(const std::string& bearerToken);
+
 		bool isTokenAuthenticated(std::string bearerToken);
 		bool isUserAuthenticationAdministrator(std::string bearerToken);
 
-		/// Returns the user belonging to the token or std::nullopt for unknown tokens and deleted users.
+		/// Returns the user belonging to the session token or std::nullopt for unknown tokens, deleted users and API tokens.
 		std::optional<User> getUserFromDatabase(std::string bearerToken);
 		std::optional<User> findUser(const std::string& username);
 		std::vector<User> getUsersFromDatabase();
@@ -62,6 +69,25 @@ namespace StructuraSystems::Server
 
 		/// Removes expired sessions.
 		void purgeExpiredSessions();
+
+		// API tokens: thin wrappers around the ApiTokenStore, so that controllers do not touch the store.
+
+		/// Issues a token. expiresInDays defaults to ServerConfig::ApiTokenDefaultLifetimeDays; a value outside of
+		/// 1 to ServerConfig::ApiTokenMaxLifetimeDays throws std::invalid_argument. The limit of tokens comes from ServerConfig.
+		/// Other exceptions as ApiTokenStore::create.
+		CreatedApiToken createApiToken(const std::string& name, ApiTokenTarget targetType, std::vector<std::string> projects,
+			const std::string& group, ApiTokenScope scope, const std::string& createdBy, std::optional<std::int64_t> expiresInDays = std::nullopt);
+		std::vector<ApiToken> listApiTokens() const;
+		std::optional<ApiToken> findApiToken(const std::string& id) const;
+		/// The token is invalid from then on, also when the database delete is still pending (see ApiTokenStore::revoke).
+		ApiTokenRevokeResult revokeApiToken(const std::string& id);
+		bool isApiTokenExpired(const ApiToken& token) const;
+		void retryPendingApiTokenRevocations();
+		std::vector<std::string> pendingApiTokenRevocations() const;
+		/// Removes a deleted project from the project tokens (a token without project is deleted).
+		std::size_t removeProjectFromApiTokens(const std::string& projectId);
+		void flushApiTokenLastUsed();
+		std::size_t purgeExpiredApiTokens();
 	private:
 		AuthenticationService();
 
@@ -74,6 +100,8 @@ namespace StructuraSystems::Server
 		mutable std::shared_mutex Mutex;
 		std::map<std::string, User> UsernameHashMap;
 		SessionStore Sessions;
+		/// Own mutex; independent of Mutex.
+		ApiTokenStore ApiTokens;
 		/// Hash of a random password, verified for unknown users so that they take as long as known ones.
 		std::string DummyHash;
 

@@ -5,12 +5,14 @@
 #include <bsoncxx/builder/basic/kvp.hpp>
 #include <bsoncxx/json.hpp>
 #include <bsoncxx/types.hpp>
+#include <mongocxx/options/index.hpp>
 #include <mongocxx/options/update.hpp>
 #include <sodium.h>
 #include <boost/uuid/random_generator.hpp>
 #include <boost/uuid/uuid_io.hpp>
 #include <nlohmann/json.hpp>
 
+#include <algorithm>
 #include <exception>
 #include <iostream>
 #include <stdexcept>
@@ -66,6 +68,8 @@ namespace StructuraSystems::Server
 				migrateFrom1To2();
 			if (version <= 2)
 				migrateFrom2To3();
+			if (version <= 3)
+				migrateFrom3To4();
 
 			writeSchemaVersion(CURRENT_SCHEMA_VERSION);
 			std::cout << "[migration] Done, schema version is now " << CURRENT_SCHEMA_VERSION << std::endl;
@@ -294,5 +298,23 @@ namespace StructuraSystems::Server
 		}
 
 		std::cout << "[migration] 2 -> 3: end" << std::endl;
+	}
+
+	void DatabaseMigrator::migrateFrom3To4()
+	{
+		std::cout << "[migration] 3 -> 4: start" << std::endl;
+
+		// API tokens: a new collection, nothing existing changes. Creating an index twice is a no-op.
+		const auto names = Database.list_collection_names();
+		if (std::find(names.begin(), names.end(), "api_tokens") == names.end())
+			Database.create_collection("api_tokens");
+
+		auto tokens = Database["api_tokens"];
+		mongocxx::options::index unique;
+		unique.unique(true);
+		tokens.create_index(make_document(kvp("tokenHash", 1)), unique);
+		tokens.create_index(make_document(kvp("name", 1)), unique);
+
+		std::cout << "[migration] 3 -> 4: end" << std::endl;
 	}
 }

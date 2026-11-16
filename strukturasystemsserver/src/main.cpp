@@ -6,6 +6,7 @@
 
 #include "Controller/AuthenticationController.hpp"
 #include "Controller/GroupController.hpp"
+#include "Controller/ApiTokenController.hpp"
 #include "Controller/ProjectController.hpp"
 #include "Controller/CommitController.hpp"
 #include "Controller/DataBaseController.h"
@@ -20,6 +21,7 @@
 #include <drogon/drogon.h>
 #include <sodium.h>
 
+#include <algorithm>
 #include <chrono>
 #include <cstdint>
 #include <cstdlib>
@@ -106,6 +108,14 @@ int main() {
     loginLimits.FailureWindow = std::chrono::seconds(readConfigPositiveInt(customConfig, "login_failure_window_seconds", loginLimits.FailureWindow.count()));
     loginLimits.MaxRequestsPerIp = static_cast<std::size_t>(readConfigPositiveInt(customConfig, "login_max_requests_per_ip", static_cast<int64_t>(loginLimits.MaxRequestsPerIp)));
     loginLimits.IpWindow = std::chrono::seconds(readConfigPositiveInt(customConfig, "login_ip_window_seconds", loginLimits.IpWindow.count()));
+    serverConfig.ApiTokenMaxLifetimeDays = std::min<int64_t>(readConfigPositiveInt(customConfig, "api_token_max_lifetime_days", serverConfig.ApiTokenMaxLifetimeDays), 365);
+    serverConfig.ApiTokenDefaultLifetimeDays = std::min(readConfigPositiveInt(customConfig, "api_token_default_lifetime_days", serverConfig.ApiTokenDefaultLifetimeDays), serverConfig.ApiTokenMaxLifetimeDays);
+    serverConfig.ApiTokenMaxCount = static_cast<std::size_t>(readConfigPositiveInt(customConfig, "api_token_max_count", static_cast<int64_t>(serverConfig.ApiTokenMaxCount)));
+    // Test only, see ServerConfig: 0 (the default) leaves the lifetime to the request.
+    serverConfig.ApiTokenLifetimeOverrideSeconds = std::min<int64_t>(readConfigPositiveInt(customConfig, "api_token_lifetime_override_seconds", 0), serverConfig.ApiTokenMaxLifetimeDays * 86400);
+    if (serverConfig.ApiTokenLifetimeOverrideSeconds > 0)
+        std::cerr << "[api_tokens] WARNING: api_token_lifetime_override_seconds is set (" << serverConfig.ApiTokenLifetimeOverrideSeconds
+                  << " s). This option is for tests only and overrides the lifetime of every new API token. Do not use it in production." << std::endl;
     auto allowedOriginList = readConfigStringArray(customConfig, "allowed_origins", {});
     // Legacy single-string key of older configs.
     if (const auto legacyOrigin = readConfigString(customConfig, "allowed_origin", ""); !legacyOrigin.empty())
@@ -142,6 +152,22 @@ int main() {
         drogon::app().getLoop()->runEvery(300.0, [] {
             StructuraSystems::Server::AuthenticationService::getInstance()->purgeExpiredSessions();
             StructuraSystems::Server::LoginThrottle::getInstance().purgeExpired();
+            // API tokens: lastUsedAt to the database, expired tokens out. Failures are logged and retried next time.
+            try {
+                StructuraSystems::Server::AuthenticationService::getInstance()->flushApiTokenLastUsed();
+            } catch (const std::exception& e) {
+                std::cerr << "[api_tokens] housekeeping: lastUsedAt could not be flushed: " << e.what() << std::endl;
+            }
+            try {
+                StructuraSystems::Server::AuthenticationService::getInstance()->retryPendingApiTokenRevocations();
+            } catch (const std::exception& e) {
+                std::cerr << "[api_tokens] housekeeping: pending revocations could not be retried: " << e.what() << std::endl;
+            }
+            try {
+                StructuraSystems::Server::AuthenticationService::getInstance()->purgeExpiredApiTokens();
+            } catch (const std::exception& e) {
+                std::cerr << "[api_tokens] housekeeping: expired tokens could not be purged: " << e.what() << std::endl;
+            }
         });
     });
 
@@ -160,4 +186,28 @@ int main() {
         .registerPostHandlingAdvice(addHeader)
         .setThreadNum(std::thread::hardware_concurrency() / 2)
         .run();
+
+    // Orderly shutdown (the event loops have ended): write the lastUsedAt values that the last timer run did not.
+    try {
+        StructuraSystems::Server::AuthenticationService::getInstance()->flushApiTokenLastUsed();
+    } catch (const std::exception& e) {
+        std::cerr << "[api_tokens] shutdown: lastUsedAt could not be flushed: " << e.what() << std::endl;
+    }
+    try {
+        StructuraSystems::Server::AuthenticationService::getInstance()->retryPendingApiTokenRevocations();
+    } catch (const std::exception& e) {
+        std::cerr << "[api_tokens] shutdown: pending revocations could not be retried: " << e.what() << std::endl;
+    }
+    try {
+        const auto stillPending = StructuraSystems::Server::AuthenticationService::getInstance()->pendingApiTokenRevocations();
+        if (!stillPending.empty()) {
+            std::string ids;
+            for (const auto& id : stillPending)
+                ids += (ids.empty() ? "" : ", ") + id;
+            std::cerr << "[api_tokens] WARNING: " << stillPending.size() << " revoked API token(s) could not be deleted from the database: " << ids
+                      << ". These tokens are valid again after the restart and must be revoked again." << std::endl;
+        }
+    } catch (const std::exception& e) {
+        std::cerr << "[api_tokens] shutdown: pending revocations could not be listed: " << e.what() << std::endl;
+    }
 }

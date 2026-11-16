@@ -21,12 +21,16 @@ namespace StructuraSystems::Server
 	std::string SessionStore::createSession(const std::string& username)
 	{
 		std::array<unsigned char, TOKEN_BYTES> raw{};
-		randombytes_buf(raw.data(), raw.size());
+		std::string token;
+		do {
+			randombytes_buf(raw.data(), raw.size());
 
-		std::string token(sodium_base64_ENCODED_LEN(raw.size(), sodium_base64_VARIANT_URLSAFE_NO_PADDING), '\0');
-		sodium_bin2base64(token.data(), token.size(), raw.data(), raw.size(), sodium_base64_VARIANT_URLSAFE_NO_PADDING);
-		// sodium_bin2base64 writes a terminating NUL that is part of the computed length.
-		token.resize(token.find('\0'));
+			token.assign(sodium_base64_ENCODED_LEN(raw.size(), sodium_base64_VARIANT_URLSAFE_NO_PADDING), '\0');
+			sodium_bin2base64(token.data(), token.size(), raw.data(), raw.size(), sodium_base64_VARIANT_URLSAFE_NO_PADDING);
+			// sodium_bin2base64 writes a terminating NUL that is part of the computed length.
+			token.resize(token.find('\0'));
+			// "sst_" marks API tokens; the filter would never treat such a session token as a session.
+		} while (token.compare(0, 4, "sst_") == 0);
 		sodium_memzero(raw.data(), raw.size());
 
 		const auto now = Clock::now();
