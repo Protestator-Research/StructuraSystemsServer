@@ -239,6 +239,10 @@ Kein Token, auch kein Server-Token mit `read_write`, erreicht `/admin/*` (Benutz
 
 Optionale Schluessel in `custom_config` (siehe [DEPLOYMENT.md](DEPLOYMENT.md)): `api_token_default_lifetime_days` (90), `api_token_max_lifetime_days` (365, hoechstens 365), `api_token_max_count` (200).
 
+## Keine vorgeladenen Standardprojekte mehr
+
+Eine neu angelegte Datenbank enthaelt keine Projekte aus der SysML-v2-Standardbibliothek mehr; das Verzeichnis `resources/sysml` entfaellt. Clients nutzen ihre lokale SysML-v2-Bibliothek. Bereits vorhandene Bibliotheksprojekte (`isLibrary: true`) bleiben unveraendert erhalten und sind weiterhin nur fuer Administratoren und Server-Tokens sichtbar. Wer sie nicht mehr braucht, loescht sie als Administrator ueber `DELETE /projects/{projectId}`.
+
 ## Schutz vor Datenverlust
 
 Fehlt die Collection `versions`, obwohl andere Collections existieren, loescht der Server die Datenbank nicht mehr. Er bricht den Start mit einer Fehlermeldung ab. Nur in Debug-Builds und nur, wenn alle vorhandenen Collections leer sind, wird neu initialisiert.

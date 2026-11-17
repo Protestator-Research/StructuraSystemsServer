@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import pytest
 import requests
 
-from conftest import TEST_DB, USER_PASSWORD, auth, get_all, login
+from conftest import LIBRARY_DESCRIPTION, TEST_DB, USER_PASSWORD, auth, get_all, login
 from token_helpers import (make_admin, SERVER_TARGET, commit_body, describe, get_token_detail, issue, list_tokens, new_commit, new_project,
                            remove_all_tokens, status)
 
@@ -268,8 +268,8 @@ def test_server_token_deletes_projects_only_with_read_write(base_url, admin_toke
 
 @pytest.mark.parametrize("scope", SCOPES)
 def test_library_projects_are_for_server_tokens_only(base_url, admin_token, world, scope):
-    libraries = [p for p in get_all(f"{base_url}/projects", auth(admin_token)) if p.get("description") == "Preloaded Project"]
-    assert libraries, "fresh DB should preload library projects"
+    libraries = [p for p in get_all(f"{base_url}/projects", auth(admin_token)) if p.get("description") == LIBRARY_DESCRIPTION]
+    assert libraries, "the server fixture seeds a library project"
     library = libraries[0]["@id"]
 
     server = auth(world.tokens[("server", scope)])

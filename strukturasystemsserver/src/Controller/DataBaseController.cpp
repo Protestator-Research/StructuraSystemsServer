@@ -18,8 +18,9 @@
 #include <stdexcept>
 #include <boost/uuid/string_generator.hpp>
 #include <boost/uuid/uuid_io.hpp>
-#include <kerml/root/annotations/TextualRepresentation.h>
 #include <nlohmann/json_fwd.hpp>
+#include <kerml/root/elements/Element.h>
+#include <sysmlv2/rest/entities/Data.h>
 #include <sysmlv2/rest/entities/Tag.h>
 #include <sysmlv2/rest/entities/Branch.h>
 #include <sysmlv2/rest/entities/JSONEntities.h>
@@ -31,7 +32,6 @@
 #include <sysmlv2/service/implementation/ElementNavigationService.h>
 #include <sysmlv2/rest/serialization/SysMLv2Deserializer.h>
 #include <iostream>
-#include <fstream>
 #include <iomanip>
 #include <mutex>
 
@@ -792,145 +792,6 @@ namespace StructuraSystems::Server
 		// Before the version entry: a failed index creation must not leave a database that the next start accepts as initialised.
 		createApiTokenCollection();
 		addVersionToDatabase();
-
-		std::vector<std::shared_ptr<Project>> projects = {
-			std::make_shared<Project>("AnalysisTooling.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("SampledFunctions.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("StateSpaceRepresentation.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("TradeStudies.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("CausationConnections.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("CauseAndEffect.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("ShapeItems.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("SpatialItems.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("ImageMetadata.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("ModelingMetadata.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("ParametersOfInterest.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("RiskMetadata.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("ISQ.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("ISQAcoustics.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("ISQAtomicNuclear.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("ISQBase.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("ISQCharacteristicNumbers.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("ISQChemistryMolecular.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("ISQCondensedMatter.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("ISQElectromagnetism.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("ISQInformation.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("ISQLight.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("ISQMechanics.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("ISQSpaceTime.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("ISQThermodynamics.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("MeasurementRefCalculations.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("MeasurementReferences.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("Quantities.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("QuantityCalculations.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("SI.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("SIPrefixes.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("TensorCalculations.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("Time.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("USCustomaryUnits.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("VectorCalculations.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("DerivationConnections.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("RequirementDerivation.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("Collections.kerml", "Preloaded Project", "main"),
-			std::make_shared<Project>("ScalarValues.kerml", "Preloaded Project", "main"),
-			std::make_shared<Project>("VectorValues.kerml", "Preloaded Project", "main"),
-			std::make_shared<Project>("BaseFunctions.kerml", "Preloaded Project", "main"),
-			std::make_shared<Project>("BooleanFunctions.kerml", "Preloaded Project", "main"),
-			std::make_shared<Project>("CollectionFunctions.kerml", "Preloaded Project", "main"),
-			std::make_shared<Project>("ComplexFunctions.kerml", "Preloaded Project", "main"),
-			std::make_shared<Project>("ControlFunctions.kerml", "Preloaded Project", "main"),
-			std::make_shared<Project>("DataFunctions.kerml", "Preloaded Project", "main"),
-			std::make_shared<Project>("IntegerFunctions.kerml", "Preloaded Project", "main"),
-			std::make_shared<Project>("NaturalFunctions.kerml", "Preloaded Project", "main"),
-			std::make_shared<Project>("NumericalFunctions.kerml", "Preloaded Project", "main"),
-			std::make_shared<Project>("OccurrenceFunctions.kerml", "Preloaded Project", "main"),
-			std::make_shared<Project>("RationalFunctions.kerml", "Preloaded Project", "main"),
-			std::make_shared<Project>("RealFunctions.kerml", "Preloaded Project", "main"),
-			std::make_shared<Project>("ScalarFunctions.kerml", "Preloaded Project", "main"),
-			std::make_shared<Project>("SequenceFunctions.kerml", "Preloaded Project", "main"),
-			std::make_shared<Project>("StringFunctions.kerml", "Preloaded Project", "main"),
-			std::make_shared<Project>("TrigFunctions.kerml", "Preloaded Project", "main"),
-			std::make_shared<Project>("VectorFunctions.kerml", "Preloaded Project", "main"),
-			std::make_shared<Project>("Base.kerml", "Preloaded Project", "main"),
-			std::make_shared<Project>("Clocks.kerml", "Preloaded Project", "main"),
-			std::make_shared<Project>("ControlPerformances.kerml", "Preloaded Project", "main"),
-			std::make_shared<Project>("FeatureReferencingPerformances.kerml", "Preloaded Project", "main"),
-			std::make_shared<Project>("KerML.kerml", "Preloaded Project", "main"),
-			std::make_shared<Project>("Links.kerml", "Preloaded Project", "main"),
-			std::make_shared<Project>("Metaobjects.kerml", "Preloaded Project", "main"),
-			std::make_shared<Project>("Objects.kerml", "Preloaded Project", "main"),
-			std::make_shared<Project>("Observation.kerml", "Preloaded Project", "main"),
-			std::make_shared<Project>("Occurrences.kerml", "Preloaded Project", "main"),
-			std::make_shared<Project>("Performances.kerml", "Preloaded Project", "main"),
-			std::make_shared<Project>("SpatialFrames.kerml", "Preloaded Project", "main"),
-			std::make_shared<Project>("StatePerformances.kerml", "Preloaded Project", "main"),
-			std::make_shared<Project>("Transfers.kerml", "Preloaded Project", "main"),
-			std::make_shared<Project>("TransitionPerformances.kerml", "Preloaded Project", "main"),
-			std::make_shared<Project>("Triggers.kerml", "Preloaded Project", "main"),
-			std::make_shared<Project>("Actions.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("Allocations.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("AnalysisCases.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("Attributes.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("Calculations.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("Cases.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("Connections.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("Constraints.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("Flows.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("Interfaces.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("Items.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("Metadata.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("Parts.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("Ports.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("Requirements.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("StandardViewDefinitions.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("States.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("SysML.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("UseCases.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("VerificationCases.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("Views.sysml", "Preloaded Project", "main")
-		};
-		for (const auto& project : projects)
-			project->setIsLibrary(true);
-		addMultibleProjects(projects);
-
-		std::map<boost::uuids::uuid, std::vector<std::shared_ptr<SysMLv2::REST::Branch>>> projectBranchMap;
-		for (const auto& project : projects)
-		{
-			projectBranchMap.insert(std::make_pair(project->getId(), std::vector<std::shared_ptr<SysMLv2::REST::Branch>>{project->getDefaultBranch()}));
-		}
-
-		std::map<boost::uuids::uuid, std::vector<std::shared_ptr<SysMLv2::REST::Commit>>> commitProjectMap;
-		std::map<boost::uuids::uuid, std::shared_ptr<SysMLv2::REST::DataVersion>> commitIdDataVersionMap;
-		std::map<boost::uuids::uuid, std::shared_ptr<KerML::Entities::Element>> commitIdElementsMap;
-
-		for (const auto& project : projects)
-		{
-			project->getDefaultBranch()->setOwningProject(project);
-			auto commit = std::make_shared<SysMLv2::REST::Commit>("Initial Commit from Structura Systems",project);
-
-			std::ifstream file;
-			file.open("resources/sysml/" + project->getName());
-			std::string line;
-			std::string content = "";
-			while (std::getline(file, line))
-			{
-				content += line + "\n";
-			}
-			const auto& payload = std::make_shared<KerML::Entities::TextualRepresentation>("SysMLv2", content);
-			auto change = std::make_shared<SysMLv2::REST::DataVersion>(payload);
-			change->setCommit(std::make_shared<SysMLv2::REST::Commit>(nlohmann::json{{"@id", boost::uuids::to_string(commit->getId())}}.dump()));
-			commit->addChange(change);
-			commitProjectMap.insert(std::make_pair(project->getId(), std::vector<std::shared_ptr<SysMLv2::REST::Commit>>{ commit }));
-			project->getDefaultBranch()->setHead(commit);
-			// project->getDefaultBranch()->setReferencedCommit(commit); TODO Final Remove after testing.
-			commitIdElementsMap.insert(std::make_pair(commit->getId(), payload));
-			commitIdDataVersionMap.insert(std::make_pair(commit->getId(), commit->getChange()[0]));
-		}
-
-		addMultibleBranches(projectBranchMap);
-		addMultibleCommits(commitProjectMap);
-		addMultibleDataVersions(commitIdDataVersionMap);
-		addMultibleElements(commitIdElementsMap);
 	}
 
 	void DataBaseController::createApiTokenCollection()

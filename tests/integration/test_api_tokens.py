@@ -7,7 +7,7 @@ import pytest
 import requests
 from bson.int64 import Int64
 
-from conftest import ADMIN_PASSWORD, TEST_DB, USER_PASSWORD, auth, get_all, login, start_server
+from conftest import ADMIN_PASSWORD, LIBRARY_DESCRIPTION, TEST_DB, USER_PASSWORD, auth, get_all, login, start_server
 from token_helpers import (make_admin, FIELDS, TOKEN_PATTERN, create_token, describe, get_token_detail, issue, list_tokens, new_project,
                            remove_all_tokens, sha256_hex, status)
 
@@ -191,8 +191,8 @@ def test_invalid_requests(base_url, admin_token):
 
 def test_library_project_is_rejected(base_url, admin_token):
     projects = get_all(f"{base_url}/projects", auth(admin_token))
-    libraries = [p for p in projects if p.get("description") == "Preloaded Project"]
-    assert libraries, "fresh DB should preload library projects"
+    libraries = [p for p in projects if p.get("description") == LIBRARY_DESCRIPTION]
+    assert libraries, "the server fixture seeds a library project"
     response = create_token(base_url, admin_token, target={"type": "project", "projects": [libraries[0]["@id"]]})
     assert response.status_code == 400
     assert "Library" in response.json()["error"]

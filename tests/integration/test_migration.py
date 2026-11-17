@@ -143,9 +143,8 @@ def test_fresh_database_has_current_schema(server, mongo):
     assert db.schema.find_one({"_id": "schema"})["version"] == 4
     assert_api_token_indexes(db)
     assert db.api_tokens.count_documents({}) == 0
-    projects = list(db.projects.find({"description": "Preloaded Project"}))
-    assert projects
-    assert all(p.get("isLibrary") is True for p in projects)
+    # A fresh database holds no preloaded projects; clients use their local SysML v2 library.
+    assert db.projects.count_documents({"description": "Preloaded Project"}) == 0
 
 
 def package_payload(element_id, name):

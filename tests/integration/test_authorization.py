@@ -3,7 +3,7 @@ import uuid
 import pytest
 import requests
 
-from conftest import auth, get_all
+from conftest import LIBRARY_DESCRIPTION, auth, get_all
 
 
 def create_project(base_url, token, **extra):
@@ -147,13 +147,13 @@ def test_admin_may_create_for_any_group(base_url, admin_token):
 
 def test_library_projects_admin_only(base_url, admin_token, make_login):
     admin_list = get_all(f"{base_url}/projects", auth(admin_token))
-    libraries = [p for p in admin_list if p.get("description") == "Preloaded Project"]
-    assert libraries, "fresh DB should preload library projects"
+    libraries = [p for p in admin_list if p.get("description") == LIBRARY_DESCRIPTION]
+    assert libraries, "the server fixture seeds a library project"
     library_id = libraries[0]["@id"]
 
     _, token = make_login()
     user_list = get_all(f"{base_url}/projects", auth(token))
-    assert all(p.get("description") != "Preloaded Project" for p in user_list)
+    assert all(p.get("description") != LIBRARY_DESCRIPTION for p in user_list)
     assert library_id not in [p["@id"] for p in user_list]
     assert requests.get(f"{base_url}/projects/{library_id}", headers=auth(token), timeout=10).status_code == 404
     assert requests.get(f"{base_url}/projects/{library_id}/commits", headers=auth(token), timeout=10).status_code == 404
