@@ -10,7 +10,7 @@ This Software part will be further extended with additional features. Stay tuned
 
 ## Sicherheit / Betrieb
 
-Der Server laeuft hinter einem Reverse Proxy mit TLS und lauscht nur lokal. Konfiguration, Umgebungsvariablen, Reverse-Proxy-Beispiele und die Rotation eingecheckter Zugangsdaten stehen in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md). Aenderungen beim Update und die Datenbankmigration beschreibt [docs/UPGRADE.md](docs/UPGRADE.md).
+Der Server laeuft hinter einem Reverse Proxy mit TLS und lauscht nur lokal. Konfiguration, Umgebungsvariablen, Reverse-Proxy-Beispiele und die Rotation eingecheckter Zugangsdaten stehen in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md). Aenderungen beim Update und die Datenbankmigration beschreibt [docs/UPGRADE.md](docs/UPGRADE.md). Anwendungen koennen sich mit eigenen, widerrufbaren API-Tokens anmelden (`Authorization: Bearer sst_...`); Rechte und Endpunkte stehen im Abschnitt "API-Tokens" von [docs/UPGRADE.md](docs/UPGRADE.md), Hinweise zum Betrieb in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 ## Licensing
 

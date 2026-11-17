@@ -2,11 +2,14 @@
 
 #include "../Controller/DataBaseController.h"
 #include "ProjectVersioningService.h"
+#include "AuthenticationService.h"
 #include "QueryService.h"
 #include "../Entities/db/Project.hpp"
 #include <sysmlv2/rest/entities/Branch.h>
 #include <sysmlv2/rest/entities/Project.h>
 
+#include <boost/uuid/uuid_io.hpp>
+#include <iostream>
 #include <mutex>
 #include <shared_mutex>
 
@@ -122,6 +125,15 @@ namespace StructuraSystems::Server
 		// with it; the versioning service lets go of its commits (cache and index), branches and tags.
 		QueryService::getInstance()->deleteQueriesOfProject(deletedProject->getId());
 		ProjectVersioningService::getInstance()->forgetProject(deletedProject);
+
+		// API tokens lose the project (a token without project is deleted). The project is gone either way, so a failure here
+		// is only logged. Lock order: ServerProjectService before the ApiTokenStore, which never calls back.
+		try {
+			AuthenticationService::getInstance()->removeProjectFromApiTokens(boost::uuids::to_string(projectId));
+		}
+		catch (const std::exception& e) {
+			std::cerr << "[api_tokens] project " << boost::uuids::to_string(projectId) << " could not be removed from the API tokens: " << e.what() << std::endl;
+		}
 		return deletedProject;
 	}
 

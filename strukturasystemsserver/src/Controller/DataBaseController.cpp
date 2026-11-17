@@ -4,10 +4,13 @@
 #include "../Entities/db/Version.hpp"
 #include "../Entities/db/Project.hpp"
 #include "DatabaseMigrator.h"
+#include "../Entities/db/ApiToken.hpp"
 
+#include <bsoncxx/builder/basic/array.hpp>
 #include <bsoncxx/builder/basic/document.hpp>
 #include <bsoncxx/builder/stream/document.hpp>
 #include <bsoncxx/json.hpp>
+#include <mongocxx/options/index.hpp>
 #include <nlohmann/json.hpp>
 #include <cctype>
 #include <vector>
@@ -15,8 +18,9 @@
 #include <stdexcept>
 #include <boost/uuid/string_generator.hpp>
 #include <boost/uuid/uuid_io.hpp>
-#include <kerml/root/annotations/TextualRepresentation.h>
 #include <nlohmann/json_fwd.hpp>
+#include <kerml/root/elements/Element.h>
+#include <sysmlv2/rest/entities/Data.h>
 #include <sysmlv2/rest/entities/Tag.h>
 #include <sysmlv2/rest/entities/Branch.h>
 #include <sysmlv2/rest/entities/JSONEntities.h>
@@ -28,7 +32,6 @@
 #include <sysmlv2/service/implementation/ElementNavigationService.h>
 #include <sysmlv2/rest/serialization/SysMLv2Deserializer.h>
 #include <iostream>
-#include <fstream>
 #include <iomanip>
 #include <mutex>
 
@@ -613,6 +616,100 @@ namespace StructuraSystems::Server
 	}
 
 
+	void DataBaseController::addApiToken(const ApiToken& token)
+	{
+		auto client = Pool.acquire();
+		auto database = (*client)[DatabaseName];
+		using bsoncxx::builder::basic::kvp;
+		// Built directly: from_json would store the timestamps as Int32 where they fit.
+		bsoncxx::builder::basic::document document;
+		document.append(kvp("_id", token.id()), kvp("tokenHash", token.tokenHash()), kvp("name", token.name()),
+			kvp("targetType", toString(token.targetType())));
+		if (token.targetType() == ApiTokenTarget::PROJECT) {
+			bsoncxx::builder::basic::array projects;
+			for (const auto& project : token.projects())
+				projects.append(project);
+			document.append(kvp("projects", projects.extract()));
+		}
+		if (token.targetType() == ApiTokenTarget::GROUP)
+			document.append(kvp("group", token.group()));
+		document.append(kvp("scope", toString(token.scope())), kvp("createdBy", token.createdBy()),
+			kvp("createdAt", static_cast<std::int64_t>(token.createdAt())),
+			kvp("expiresAt", static_cast<std::int64_t>(token.expiresAt())),
+			kvp("lastUsedAt", static_cast<std::int64_t>(token.lastUsedAt())));
+		database[API_TOKEN_COLLECTION_IDENTIFIER].insert_one(document.view());
+	}
+
+	std::vector<ApiToken> DataBaseController::getAllApiTokens()
+	{
+		auto client = Pool.acquire();
+		auto database = (*client)[DatabaseName];
+		std::vector<ApiToken> returnValue;
+		std::size_t skipped = 0;
+		for (auto&& doc : database[API_TOKEN_COLLECTION_IDENTIFIER].find({}))
+		{
+			try {
+				returnValue.emplace_back(bsoncxx::to_json(doc));
+			}
+			catch (const std::exception& e) {
+				// Only the _id, never the document (it holds the token hash).
+				++skipped;
+				const auto idElement = doc["_id"];
+				const std::string id = idElement && idElement.type() == bsoncxx::type::k_string ? std::string(idElement.get_string().value) : "<not a string>";
+				std::cerr << "[api_tokens] The stored token with _id " << id << " could not be read and is skipped: " << e.what() << std::endl;
+			}
+		}
+		std::cout << returnValue.size() << " API tokens loaded from Database." << std::endl;
+		if (skipped > 0)
+			std::cerr << "[api_tokens] WARNING: " << skipped << " stored API token document(s) could not be loaded and were skipped." << std::endl;
+		return returnValue;
+	}
+
+	bool DataBaseController::removeApiToken(const std::string& id)
+	{
+		auto client = Pool.acquire();
+		auto database = (*client)[DatabaseName];
+		const auto result = database[API_TOKEN_COLLECTION_IDENTIFIER].delete_one(
+			bsoncxx::builder::basic::make_document(bsoncxx::builder::basic::kvp("_id", id)));
+		return result.has_value() && result->deleted_count() > 0;
+	}
+
+	std::int64_t DataBaseController::removeExpiredApiTokens(std::int64_t now)
+	{
+		auto client = Pool.acquire();
+		auto database = (*client)[DatabaseName];
+		using bsoncxx::builder::basic::kvp;
+		using bsoncxx::builder::basic::make_document;
+		const auto result = database[API_TOKEN_COLLECTION_IDENTIFIER].delete_many(
+			make_document(kvp("expiresAt", make_document(kvp("$lt", now)))));
+		return result.has_value() ? result->deleted_count() : 0;
+	}
+
+	void DataBaseController::updateApiTokenLastUsed(const std::string& id, std::int64_t lastUsedAt)
+	{
+		auto client = Pool.acquire();
+		auto database = (*client)[DatabaseName];
+		using bsoncxx::builder::basic::kvp;
+		using bsoncxx::builder::basic::make_document;
+		database[API_TOKEN_COLLECTION_IDENTIFIER].update_one(
+			make_document(kvp("_id", id)),
+			make_document(kvp("$set", make_document(kvp("lastUsedAt", lastUsedAt)))));
+	}
+
+	void DataBaseController::updateApiTokenProjects(const std::string& id, const std::vector<std::string>& projects)
+	{
+		auto client = Pool.acquire();
+		auto database = (*client)[DatabaseName];
+		using bsoncxx::builder::basic::kvp;
+		using bsoncxx::builder::basic::make_document;
+		bsoncxx::builder::basic::array array;
+		for (const auto& project : projects)
+			array.append(project);
+		database[API_TOKEN_COLLECTION_IDENTIFIER].update_one(
+			make_document(kvp("_id", id)),
+			make_document(kvp("$set", make_document(kvp("projects", array.extract())))));
+	}
+
 	DataBaseController* DataBaseController::createInstance(std::string dbAddress, std::string username, std::string password, std::string databaseName, bool tls)
 	{
 		// std::call_once makes the creation thread safe. If the constructor throws, the flag stays
@@ -692,146 +789,21 @@ namespace StructuraSystems::Server
 		database.create_collection(DIGITAL_TWIN_COLLECTION_IDENTIFIER);
 		database.create_collection(VERSION_COLLECTION_IDENTIFIER);
 
+		// Before the version entry: a failed index creation must not leave a database that the next start accepts as initialised.
+		createApiTokenCollection();
 		addVersionToDatabase();
+	}
 
-		std::vector<std::shared_ptr<Project>> projects = {
-			std::make_shared<Project>("AnalysisTooling.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("SampledFunctions.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("StateSpaceRepresentation.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("TradeStudies.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("CausationConnections.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("CauseAndEffect.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("ShapeItems.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("SpatialItems.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("ImageMetadata.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("ModelingMetadata.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("ParametersOfInterest.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("RiskMetadata.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("ISQ.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("ISQAcoustics.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("ISQAtomicNuclear.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("ISQBase.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("ISQCharacteristicNumbers.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("ISQChemistryMolecular.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("ISQCondensedMatter.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("ISQElectromagnetism.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("ISQInformation.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("ISQLight.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("ISQMechanics.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("ISQSpaceTime.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("ISQThermodynamics.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("MeasurementRefCalculations.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("MeasurementReferences.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("Quantities.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("QuantityCalculations.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("SI.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("SIPrefixes.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("TensorCalculations.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("Time.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("USCustomaryUnits.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("VectorCalculations.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("DerivationConnections.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("RequirementDerivation.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("Collections.kerml", "Preloaded Project", "main"),
-			std::make_shared<Project>("ScalarValues.kerml", "Preloaded Project", "main"),
-			std::make_shared<Project>("VectorValues.kerml", "Preloaded Project", "main"),
-			std::make_shared<Project>("BaseFunctions.kerml", "Preloaded Project", "main"),
-			std::make_shared<Project>("BooleanFunctions.kerml", "Preloaded Project", "main"),
-			std::make_shared<Project>("CollectionFunctions.kerml", "Preloaded Project", "main"),
-			std::make_shared<Project>("ComplexFunctions.kerml", "Preloaded Project", "main"),
-			std::make_shared<Project>("ControlFunctions.kerml", "Preloaded Project", "main"),
-			std::make_shared<Project>("DataFunctions.kerml", "Preloaded Project", "main"),
-			std::make_shared<Project>("IntegerFunctions.kerml", "Preloaded Project", "main"),
-			std::make_shared<Project>("NaturalFunctions.kerml", "Preloaded Project", "main"),
-			std::make_shared<Project>("NumericalFunctions.kerml", "Preloaded Project", "main"),
-			std::make_shared<Project>("OccurrenceFunctions.kerml", "Preloaded Project", "main"),
-			std::make_shared<Project>("RationalFunctions.kerml", "Preloaded Project", "main"),
-			std::make_shared<Project>("RealFunctions.kerml", "Preloaded Project", "main"),
-			std::make_shared<Project>("ScalarFunctions.kerml", "Preloaded Project", "main"),
-			std::make_shared<Project>("SequenceFunctions.kerml", "Preloaded Project", "main"),
-			std::make_shared<Project>("StringFunctions.kerml", "Preloaded Project", "main"),
-			std::make_shared<Project>("TrigFunctions.kerml", "Preloaded Project", "main"),
-			std::make_shared<Project>("VectorFunctions.kerml", "Preloaded Project", "main"),
-			std::make_shared<Project>("Base.kerml", "Preloaded Project", "main"),
-			std::make_shared<Project>("Clocks.kerml", "Preloaded Project", "main"),
-			std::make_shared<Project>("ControlPerformances.kerml", "Preloaded Project", "main"),
-			std::make_shared<Project>("FeatureReferencingPerformances.kerml", "Preloaded Project", "main"),
-			std::make_shared<Project>("KerML.kerml", "Preloaded Project", "main"),
-			std::make_shared<Project>("Links.kerml", "Preloaded Project", "main"),
-			std::make_shared<Project>("Metaobjects.kerml", "Preloaded Project", "main"),
-			std::make_shared<Project>("Objects.kerml", "Preloaded Project", "main"),
-			std::make_shared<Project>("Observation.kerml", "Preloaded Project", "main"),
-			std::make_shared<Project>("Occurrences.kerml", "Preloaded Project", "main"),
-			std::make_shared<Project>("Performances.kerml", "Preloaded Project", "main"),
-			std::make_shared<Project>("SpatialFrames.kerml", "Preloaded Project", "main"),
-			std::make_shared<Project>("StatePerformances.kerml", "Preloaded Project", "main"),
-			std::make_shared<Project>("Transfers.kerml", "Preloaded Project", "main"),
-			std::make_shared<Project>("TransitionPerformances.kerml", "Preloaded Project", "main"),
-			std::make_shared<Project>("Triggers.kerml", "Preloaded Project", "main"),
-			std::make_shared<Project>("Actions.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("Allocations.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("AnalysisCases.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("Attributes.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("Calculations.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("Cases.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("Connections.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("Constraints.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("Flows.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("Interfaces.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("Items.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("Metadata.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("Parts.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("Ports.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("Requirements.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("StandardViewDefinitions.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("States.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("SysML.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("UseCases.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("VerificationCases.sysml", "Preloaded Project", "main"),
-			std::make_shared<Project>("Views.sysml", "Preloaded Project", "main")
-		};
-		for (const auto& project : projects)
-			project->setIsLibrary(true);
-		addMultibleProjects(projects);
-
-		std::map<boost::uuids::uuid, std::vector<std::shared_ptr<SysMLv2::REST::Branch>>> projectBranchMap;
-		for (const auto& project : projects)
-		{
-			projectBranchMap.insert(std::make_pair(project->getId(), std::vector<std::shared_ptr<SysMLv2::REST::Branch>>{project->getDefaultBranch()}));
-		}
-
-		std::map<boost::uuids::uuid, std::vector<std::shared_ptr<SysMLv2::REST::Commit>>> commitProjectMap;
-		std::map<boost::uuids::uuid, std::shared_ptr<SysMLv2::REST::DataVersion>> commitIdDataVersionMap;
-		std::map<boost::uuids::uuid, std::shared_ptr<KerML::Entities::Element>> commitIdElementsMap;
-
-		for (const auto& project : projects)
-		{
-			project->getDefaultBranch()->setOwningProject(project);
-			auto commit = std::make_shared<SysMLv2::REST::Commit>("Initial Commit from Structura Systems",project);
-
-			std::ifstream file;
-			file.open("resources/sysml/" + project->getName());
-			std::string line;
-			std::string content = "";
-			while (std::getline(file, line))
-			{
-				content += line + "\n";
-			}
-			const auto& payload = std::make_shared<KerML::Entities::TextualRepresentation>("SysMLv2", content);
-			auto change = std::make_shared<SysMLv2::REST::DataVersion>(payload);
-			change->setCommit(std::make_shared<SysMLv2::REST::Commit>(nlohmann::json{{"@id", boost::uuids::to_string(commit->getId())}}.dump()));
-			commit->addChange(change);
-			commitProjectMap.insert(std::make_pair(project->getId(), std::vector<std::shared_ptr<SysMLv2::REST::Commit>>{ commit }));
-			project->getDefaultBranch()->setHead(commit);
-			// project->getDefaultBranch()->setReferencedCommit(commit); TODO Final Remove after testing.
-			commitIdElementsMap.insert(std::make_pair(commit->getId(), payload));
-			commitIdDataVersionMap.insert(std::make_pair(commit->getId(), commit->getChange()[0]));
-		}
-
-		addMultibleBranches(projectBranchMap);
-		addMultibleCommits(commitProjectMap);
-		addMultibleDataVersions(commitIdDataVersionMap);
-		addMultibleElements(commitIdElementsMap);
+	void DataBaseController::createApiTokenCollection()
+	{
+		auto client = Pool.acquire();
+		auto database = (*client)[DatabaseName];
+		database.create_collection(API_TOKEN_COLLECTION_IDENTIFIER);
+		auto collection = database[API_TOKEN_COLLECTION_IDENTIFIER];
+		mongocxx::options::index unique;
+		unique.unique(true);
+		collection.create_index(bsoncxx::builder::basic::make_document(bsoncxx::builder::basic::kvp("tokenHash", 1)), unique);
+		collection.create_index(bsoncxx::builder::basic::make_document(bsoncxx::builder::basic::kvp("name", 1)), unique);
 	}
 
 	bool DataBaseController::checkDatabaseState() {

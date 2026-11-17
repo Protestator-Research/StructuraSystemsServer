@@ -39,6 +39,7 @@ TEST_DB = "structura_systems_test"
 TEST_PORT = 18088
 ADMIN_PASSWORD = "TestAdmin123!"
 USER_PASSWORD = "Password1234!"
+LIBRARY_DESCRIPTION = "Library Project"
 # Credentials of the Mongo instance used by the tests, also handed to the server under test.
 MONGO_USER = os.environ.get("TEST_MONGO_USER", "root")
 MONGO_PASSWORD = os.environ.get("TEST_MONGO_PASSWORD", "root-password")
@@ -182,7 +183,22 @@ def server(base_url):
     assert TEST_DB != "structura_systems"
     # Many tests log in from 127.0.0.1, so the throttle limits are far above anything the suite reaches.
     limits = {"login_max_requests_per_ip": 100000, "login_max_failures_per_user": 1000}
-    with start_server(TEST_DB, TEST_PORT, custom_config=limits) as (proc, _):
+    # The server no longer preloads library projects. Library projects of older databases still exist, so one is seeded:
+    # created on a first start, marked as library in the database and loaded by a second start.
+    with start_server(TEST_DB, TEST_PORT, custom_config=limits):
+        token = login(base_url, "admin", ADMIN_PASSWORD)
+        response = requests.post(f"{base_url}/projects", json={"name": "Lib.sysml", "description": LIBRARY_DESCRIPTION},
+                                 headers=auth(token), timeout=10)
+        assert response.status_code == 201, response.text
+        library_id = response.json()["@id"]
+    client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000)
+    try:
+        result = client[TEST_DB].projects.update_one(
+            {"_id": library_id}, {"$set": {"isLibrary": True}, "$unset": {"owner": "", "owningGroup": ""}})
+        assert result.matched_count == 1
+    finally:
+        client.close()
+    with start_server(TEST_DB, TEST_PORT, drop_db=False, custom_config=limits) as (proc, _):
         yield proc
 
 

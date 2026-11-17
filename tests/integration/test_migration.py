@@ -71,6 +71,13 @@ def seed_v1(client):
     return ids
 
 
+def assert_api_token_indexes(db):
+    assert "api_tokens" in db.list_collection_names()
+    unique = {tuple(field for field, _ in info["key"]): info.get("unique", False) for info in db.api_tokens.index_information().values()}
+    assert unique.get(("tokenHash",)) is True
+    assert unique.get(("name",)) is True
+
+
 def snapshot(db):
     return {name: sorted(db[name].find({}), key=lambda d: str(d["_id"]))
             for name in db.list_collection_names()}
@@ -105,12 +112,14 @@ def test_migration_from_v1(mig_client):
     assert branch["owningProject"] == {"@id": ids["alice"]}
     assert db.commits.find_one({"owningProject.@id": ids["alice"]})["change"] == []
 
-    assert db.schema.find_one({"_id": "schema"})["version"] == 3
+    assert db.schema.find_one({"_id": "schema"})["version"] == 4
+    # the migration to 4 ran as well
+    assert_api_token_indexes(db)
 
 
 def test_migration_is_idempotent(mig_client):
     db = mig_client[MIG_DB]
-    assert db.schema.find_one({"_id": "schema"})["version"] == 3
+    assert db.schema.find_one({"_id": "schema"})["version"] == 4
     before = snapshot(db)
     with start_server(MIG_DB, MIG_PORT, drop_db=False):
         pass
@@ -125,16 +134,17 @@ def test_newer_schema_refuses_start(mig_client):
         with start_server(MIG_DB, MIG_PORT, drop_db=False, expect_ready=False) as (proc, _):
             assert proc.wait(timeout=60) != 0
     finally:
-        db.schema.update_one({"_id": "schema"}, {"$set": {"version": 3}})
+        db.schema.update_one({"_id": "schema"}, {"$set": {"version": 4}})
     assert snapshot(db) == before
 
 
 def test_fresh_database_has_current_schema(server, mongo):
     db = mongo[TEST_DB]
-    assert db.schema.find_one({"_id": "schema"})["version"] == 3
-    projects = list(db.projects.find({"description": "Preloaded Project"}))
-    assert projects
-    assert all(p.get("isLibrary") is True for p in projects)
+    assert db.schema.find_one({"_id": "schema"})["version"] == 4
+    assert_api_token_indexes(db)
+    assert db.api_tokens.count_documents({}) == 0
+    # A fresh database holds no preloaded projects; clients use their local SysML v2 library.
+    assert db.projects.count_documents({"description": "Preloaded Project"}) == 0
 
 
 def package_payload(element_id, name):
@@ -195,7 +205,8 @@ def test_migration_from_v2_completes_data_versions_and_branches(mig_client):
     with start_server(MIG_DB, MIG_PORT, drop_db=False) as (proc, output):
         log = output.read_text(errors="replace")
         assert "2 -> 3" in log
-        assert db.schema.find_one({"_id": "schema"})["version"] == 3
+        assert db.schema.find_one({"_id": "schema"})["version"] == 4
+        assert_api_token_indexes(db)
 
         assert db.branches.find_one({"_id": ids["branch"]})["owningProject"] == {"@id": ids["project"]}
 
@@ -232,6 +243,23 @@ def test_migration_from_v2_completes_data_versions_and_branches(mig_client):
     with start_server(MIG_DB, MIG_PORT, drop_db=False):
         pass
     assert snapshot(db) == before
+
+
+def test_migration_from_3_to_4_is_idempotent(mig_client):
+    seed_v2(mig_client)
+    db = mig_client[MIG_DB]
+    with start_server(MIG_DB, MIG_PORT, drop_db=False):
+        pass
+    assert db.schema.find_one({"_id": "schema"})["version"] == 4
+    assert_api_token_indexes(db)
+
+    # the collection and its indexes exist already when the migration runs again
+    db.schema.update_one({"_id": "schema"}, {"$set": {"version": 3}})
+    with start_server(MIG_DB, MIG_PORT, drop_db=False) as (proc, output):
+        pass
+    assert "3 -> 4" in output.read_text(errors="replace")
+    assert db.schema.find_one({"_id": "schema"})["version"] == 4
+    assert_api_token_indexes(db)
 
 
 def test_nonempty_db_without_versions_is_not_dropped(mig_client):

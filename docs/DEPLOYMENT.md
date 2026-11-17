@@ -68,8 +68,31 @@ Eine kommentierte Vorlage ist `config.example.json`.
 | `login_failure_window_seconds` | 900 | Zeitfenster dafuer |
 | `login_max_requests_per_ip` | 20 | Login-Anfragen pro Client-IP |
 | `login_ip_window_seconds` | 60 | Zeitfenster dafuer |
+| `api_token_default_lifetime_days` | 90 | Laufzeit eines API-Tokens, wenn die Anfrage `expiresInDays` nicht angibt |
+| `api_token_max_lifetime_days` | 365 | Obergrenze fuer `expiresInDays`; hoehere Werte werden auf 365 begrenzt |
+| `api_token_max_count` | 200 | Hoechstzahl gleichzeitig vorhandener API-Tokens (danach 409) |
+
+Alle Werte sind positive ganze Zahlen, sonst gilt der Standard. Die Standardlaufzeit wird auf die Obergrenze begrenzt. Ein weiterer Schluessel, `api_token_lifetime_override_seconds`, ist **nur fuer Tests** gedacht (er kann die Laufzeit neuer Tokens nur verkuerzen: sie betraegt hoechstens diese Sekundenzahl) und darf in Produktion nicht gesetzt werden; der Server warnt beim Start, wenn er gesetzt ist.
 
 Die Konfiguration `config.json` im Repository enthaelt keine Zugangsdaten und lauscht auf `127.0.0.1:8088`.
+
+## API-Tokens im Betrieb
+
+Beschreibung der Endpunkte und Rechte: [UPGRADE.md](UPGRADE.md), Abschnitt "API-Tokens".
+
+- Das Token gehoert nur in den `Authorization`-Header (`Bearer sst_...`), **nie in eine URL** oder einen Query-Parameter, weil URLs in den Logs von Reverse Proxy und Client landen. Der Reverse Proxy sollte den `Authorization`-Header nicht protokollieren.
+- Der Klartext wird bei der Ausstellung genau einmal angezeigt und ist danach nicht wiederherstellbar; der Server speichert nur den SHA-256-Hash. Ein verlorenes Token wird widerrufen und neu ausgestellt. Der Klartext steht nie im Server-Log.
+- **Server-Tokens duerfen alles lesen, schreiben und loeschen, auch Bibliotheksprojekte** (mit `read_write`; mit `read` alles lesen). Sie sparsam ausstellen, nur mit `read`, wo das reicht, und mit kurzer Laufzeit. Projekt- und Gruppen-Tokens sind vorzuziehen.
+- **Beim Ausscheiden eines Administrators die Tokens pruefen.** Tokens sind nicht an das Konto des Ausstellers gebunden und bleiben nach dessen Loeschen oder Herabstufen gueltig. `GET /admin/tokens` zeigt `createdBy` fuer jedes Token; unerwuenschte Tokens mit `DELETE /admin/tokens/{id}` widerrufen. Spaetestens nach 365 Tagen laufen alle Tokens ab.
+- Ein Widerruf wirkt fuer jede neue Anfrage sofort. Eine Anfrage, die bereits bearbeitet wird, unterbricht er nicht.
+- `lastUsedAt` wird im Speicher gefuehrt und hoechstens alle 5 Minuten (und beim geordneten Beenden des Servers) in die Datenbank geschrieben. Der angezeigte Wert ist im laufenden Betrieb aktuell, nach einem Absturz kann er bis zu 5 Minuten alt sein.
+- Ausstellen und Widerruf erscheinen als Zeilen mit `[audit]` auf stdout (Token-Id, Name, Ziel, Zugriffsart, Aussteller). Zum Auswerten die Ausgabe des Dienstes sammeln.
+- **Eine Serverinstanz je Datenbank.** Tokens liegen beim Start im Speicher des Prozesses. Widerruf und neue Tokens wirken nur im laufenden Prozess; eine zweite Instanz auf derselben Datenbank sieht sie erst nach ihrem Neustart.
+- Der Widerruf wirkt im laufenden Prozess sofort, auch wenn MongoDB nicht erreichbar ist. Schlaegt das Loeschen in der Datenbank fehl, antwortet `DELETE` mit 503, der Server protokolliert die Token-Id und wiederholt das Loeschen (Housekeeping, geordnetes Beenden, erneutes `DELETE`). Wird der Prozess vorher beendet, bleibt das Dokument bestehen und das Token gilt nach dem Neustart wieder; dann erneut widerrufen.
+- Abgelaufene Tokens bleiben 30 Tage erhalten und sind mit `expired: true` sichtbar, damit eine falsch gehende Systemuhr keine Tokens loescht. Ihr Name darf wiederverwendet werden, sie zaehlen nicht zur Hoechstzahl.
+- Das Ausstellen eines Tokens und das Loeschen eines Projekts halten den Speicher des Token-Stores waehrend ihrer Datenbankzugriffe gesperrt; bei langsamer MongoDB warten in dieser Zeit auch die Authentifizierungen mit API-Tokens.
+- Ein Server-Token mit `read_write` kann alle Projekte loeschen, auch Bibliotheksprojekte. Seine Nutzung wird nicht je Anfrage protokolliert, nur `lastUsedAt` wird gefuehrt.
+- Gruppen-Tokens folgen `owningGroup`: Wer Projekte in die Gruppe oder aus ihr heraus verschiebt, aendert, was das Token abdeckt.
 
 ## Lokal starten
 

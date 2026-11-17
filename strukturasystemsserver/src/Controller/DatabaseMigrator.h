@@ -10,7 +10,7 @@ namespace StructuraSystems::Server
 	class DatabaseMigrator
 	{
 	public:
-		static constexpr std::int32_t CURRENT_SCHEMA_VERSION = 3;
+		static constexpr std::int32_t CURRENT_SCHEMA_VERSION = 4;
 
 		explicit DatabaseMigrator(mongocxx::database database);
 
@@ -24,6 +24,7 @@ namespace StructuraSystems::Server
 		void writeSchemaVersion(std::int32_t version);
 		void migrateFrom1To2();
 		void migrateFrom2To3();
+		void migrateFrom3To4();
 
 		mongocxx::database Database;
 	};
